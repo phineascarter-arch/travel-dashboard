@@ -321,6 +321,15 @@
       if (ra !== rb) return ra - rb;
       return a.name.localeCompare(b.name, 'zh-Hant');
     });
+
+    // Clicking a country on the map should make it the first card in the destination list
+    // below, not just scrolled into view — bump it to the front, ahead of the normal
+    // region/alphabetical order, if it's currently in the filtered results at all.
+    if (selectedId) {
+      const idx = list.findIndex(function (c) { return c.id === selectedId; });
+      if (idx > 0) list.unshift(list.splice(idx, 1)[0]);
+    }
+
     return list;
   }
 
@@ -1006,25 +1015,14 @@
     selectedId = id;
     renderGrid();
     renderMap();
-    const escaped = window.CSS && CSS.escape ? CSS.escape(id) : id;
-    const el = document.querySelector('.country-card[data-id="' + escaped + '"]');
-    if (!el) return;
-    // The destination list is its own scroll box nested inside the page. scrollIntoView()'s
-    // built-in ancestor-walking was unreliable for this two-level case in practice, so both
-    // levels are scrolled explicitly instead: getBoundingClientRect() deltas (viewport-relative,
-    // so they're correct regardless of CSS positioning/offsetParent quirks) give the exact
-    // scrollTop the list needs to center the card, and the same math against the window gives
-    // the page scroll needed to bring the list itself into view.
+    // computeFilteredList() bumps the selected country to the front of the destination list,
+    // so it's always the first card — just reset the list's own scroll to the top, then bring
+    // the list section into view on the page (getBoundingClientRect() is viewport-relative, so
+    // this is correct regardless of CSS positioning/offsetParent quirks).
     const grid = document.getElementById('countryGrid');
+    grid.scrollTo({ top: 0, behavior: 'smooth' });
     const gridRect = grid.getBoundingClientRect();
-    const cardRect = el.getBoundingClientRect();
-
-    const cardOffsetInGrid = (cardRect.top - gridRect.top) + grid.scrollTop;
-    const gridTargetScrollTop = cardOffsetInGrid - (grid.clientHeight / 2) + (cardRect.height / 2);
-    grid.scrollTo({ top: Math.max(0, gridTargetScrollTop), behavior: 'smooth' });
-
-    const pageTargetScrollY = window.scrollY + gridRect.top - 80;
-    window.scrollTo({ top: Math.max(0, pageTargetScrollY), behavior: 'smooth' });
+    window.scrollTo({ top: Math.max(0, window.scrollY + gridRect.top - 80), behavior: 'smooth' });
   }
 
   // ---------- modal ----------
@@ -1465,17 +1463,35 @@
   function setupMapZoomPan() {
     const viewport = document.getElementById('mapViewport');
 
-    viewport.addEventListener('wheel', function (e) {
-      e.preventDefault();
-      const rect = viewport.getBoundingClientRect();
-      const cx = e.clientX - rect.left, cy = e.clientY - rect.top;
-      const factor = e.deltaY > 0 ? 0.88 : 1.14;
+    // Shared by wheel-zoom and the +/- buttons: zooms toward (cx, cy), a point expressed in
+    // viewport-local pixels (e.g. the mouse position, or the viewport's own center for the
+    // buttons, which have no pointer position to anchor to).
+    function zoomBy(factor, cx, cy) {
       const newScale = Math.min(6, Math.max(1, zoomScale * factor));
       panX = cx - (cx - panX) * (newScale / zoomScale);
       panY = cy - (cy - panY) * (newScale / zoomScale);
       zoomScale = newScale;
       applyMapTransform();
+    }
+
+    viewport.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      zoomBy(e.deltaY > 0 ? 0.88 : 1.14, e.clientX - rect.left, e.clientY - rect.top);
     }, { passive: false });
+
+    document.getElementById('mapZoomIn').addEventListener('click', function () {
+      const rect = viewport.getBoundingClientRect();
+      zoomBy(1.3, rect.width / 2, rect.height / 2);
+    });
+    document.getElementById('mapZoomOut').addEventListener('click', function () {
+      const rect = viewport.getBoundingClientRect();
+      zoomBy(1 / 1.3, rect.width / 2, rect.height / 2);
+    });
+    document.getElementById('mapZoomReset').addEventListener('click', function () {
+      zoomScale = 1; panX = 0; panY = 0;
+      applyMapTransform();
+    });
 
     viewport.addEventListener('pointerdown', function (e) {
       mapDragging = true;
