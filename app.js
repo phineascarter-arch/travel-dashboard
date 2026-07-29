@@ -1008,7 +1008,13 @@
     renderMap();
     const escaped = window.CSS && CSS.escape ? CSS.escape(id) : id;
     const el = document.querySelector('.country-card[data-id="' + escaped + '"]');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (!el) return;
+    // The destination list is its own scroll box (independent from the page), so a single
+    // scrollIntoView() on the card only scrolls within that box — the page itself never
+    // moves to bring the (possibly far down the page) list into view. Two explicit calls,
+    // one per scroll container, cover both levels.
+    document.getElementById('countryGrid').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   // ---------- modal ----------

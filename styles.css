@@ -431,6 +431,9 @@ a { color: var(--gold-bright); }
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 12px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 @media (max-width: 640px) {
   .country-grid { grid-template-columns: 1fr; }
@@ -450,14 +453,14 @@ a { color: var(--gold-bright); }
 .country-card.highlighted { box-shadow: 0 0 0 2px var(--gold-bright), 0 0 16px rgba(255, 224, 138, 0.5); }
 
 .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-.card-name { font-weight: 700; font-size: 1rem; color: var(--text); }
-.card-name-en { font-size: 0.72rem; color: var(--text-dim); font-family: var(--mono); }
+.card-name { font-weight: 700; font-size: 1.3rem; color: var(--text); }
+.card-name-en { font-size: 0.92rem; color: var(--text-dim); font-family: var(--mono); }
 
 .badge {
   display: inline-block;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 3px;
-  font-size: 0.66rem;
+  font-size: 0.82rem;
   font-family: var(--mono);
   font-weight: 700;
   letter-spacing: 0.5px;
@@ -477,22 +480,22 @@ a { color: var(--gold-bright); }
 .safety-badge-yellow { color: #e0c94a; }
 .safety-badge-orange { color: var(--c-voa); }
 .safety-badge-red { color: var(--c-restricted); }
-.card-safety-note { font-size: 0.74rem; color: #ffb199; background: rgba(255, 77, 109, 0.08); border: 1px solid rgba(255, 77, 109, 0.2); border-radius: 4px; padding: 4px 8px; }
+.card-safety-note { font-size: 0.9rem; color: #ffb199; background: rgba(255, 77, 109, 0.08); border: 1px solid rgba(255, 77, 109, 0.2); border-radius: 4px; padding: 5px 9px; }
 
 .badge-heritage { color: #7fd9c4; border-color: #7fd9c4; }
 .tt-badge.badge-heritage { border: 1px solid #7fd9c4; border-radius: 3px; padding: 2px 6px; display: inline-block; }
 
 .badge-vaccine-required { color: #ff8fa3; border-color: #ff8fa3; }
 .badge-vaccine-conditional { color: #c9788a; border-color: #c9788a; }
-.card-health-note { font-size: 0.74rem; color: #ffb3c2; background: rgba(255, 143, 163, 0.08); border: 1px solid rgba(255, 143, 163, 0.2); border-radius: 4px; padding: 4px 8px; }
+.card-health-note { font-size: 0.9rem; color: #ffb3c2; background: rgba(255, 143, 163, 0.08); border: 1px solid rgba(255, 143, 163, 0.2); border-radius: 4px; padding: 5px 9px; }
 
-.card-meta { font-size: 0.78rem; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 6px 12px; font-family: var(--mono); }
-.card-note { font-size: 0.76rem; color: var(--text-dim); font-style: italic; }
-.card-personal-note { font-size: 0.76rem; color: #9be89a; background: rgba(57,255,142,0.08); border-radius: 4px; padding: 4px 8px; border: 1px solid rgba(57,255,142,0.2); }
+.card-meta { font-size: 0.94rem; color: var(--text-dim); display: flex; flex-wrap: wrap; gap: 6px 12px; font-family: var(--mono); }
+.card-note { font-size: 0.92rem; color: var(--text-dim); font-style: italic; }
+.card-personal-note { font-size: 0.92rem; color: #9be89a; background: rgba(57,255,142,0.08); border-radius: 4px; padding: 5px 9px; border: 1px solid rgba(57,255,142,0.2); }
 
 .card-heritage {
-  font-size: 0.76rem; color: #7fd9c4; background: rgba(127, 217, 196, 0.08);
-  border: 1px solid rgba(127, 217, 196, 0.25); border-radius: 4px; padding: 4px 8px;
+  font-size: 0.92rem; color: #7fd9c4; background: rgba(127, 217, 196, 0.08);
+  border: 1px solid rgba(127, 217, 196, 0.25); border-radius: 4px; padding: 5px 9px;
 }
 .card-heritage summary { cursor: pointer; font-family: var(--mono); user-select: none; }
 .card-heritage summary:hover { color: #a6ecdd; }
@@ -500,7 +503,7 @@ a { color: var(--gold-bright); }
 .heritage-list li { margin-bottom: 2px; }
 
 .card-bottom { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 4px; }
-.status-select { font-size: 0.72rem; padding: 4px 6px; border-radius: 3px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text); font-family: var(--mono); }
+.status-select { font-size: 0.86rem; padding: 5px 7px; border-radius: 3px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text); font-family: var(--mono); }
 .card-actions { display: flex; gap: 4px; align-items: center; }
 .route-count-badge {
   font-family: var(--mono); font-size: 0.65rem; color: var(--gold-bright);
