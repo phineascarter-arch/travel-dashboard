@@ -1015,14 +1015,15 @@
     selectedId = id;
     renderGrid();
     renderMap();
-    // computeFilteredList() bumps the selected country to the front of the destination list,
-    // so it's always the first card — just reset the list's own scroll to the top, then bring
-    // the list section into view on the page (getBoundingClientRect() is viewport-relative, so
-    // this is correct regardless of CSS positioning/offsetParent quirks).
-    const grid = document.getElementById('countryGrid');
-    grid.scrollTo({ top: 0, behavior: 'smooth' });
-    const gridRect = grid.getBoundingClientRect();
-    window.scrollTo({ top: Math.max(0, window.scrollY + gridRect.top - 80), behavior: 'smooth' });
+    document.getElementById('countryGrid').scrollTop = 0;
+    // JS scrollIntoView()/scrollTo() calls proved unreliable in practice for this two-level
+    // (page scroll + inner list scrollbox) case across browsers/devices. Native URL-fragment
+    // navigation uses the browser's own long-established anchor-jump scrolling instead, which
+    // walks every scrollable ancestor correctly without any custom math. Clear the hash first
+    // so re-selecting the same target (or clicking the same country twice) still re-triggers
+    // the jump — browsers only scroll on an actual hash *change*.
+    history.replaceState(null, '', location.pathname + location.search);
+    location.hash = 'countryGrid';
   }
 
   // ---------- modal ----------
@@ -1303,6 +1304,16 @@
       '<div class="legend-item"><span class="legend-swatch legend-swatch-outline" style="border-color:var(--c-restricted)"></span>紅色旅遊警示</div>';
   }
 
+  // The SVG carries an English name for every shape via a sibling <text id="XX-label">
+  // element (permanently display:none — never meant to render on the map itself, see the
+  // #labels group), which doubles as a name source for the ~90 countries on the map that
+  // aren't in our curated 152-country dataset and so have no `country.name` of their own.
+  function getMapLabelName(svgGroupId) {
+    if (!mapSvg) return svgGroupId;
+    const labelEl = mapSvg.querySelector('#' + CSS.escape(svgGroupId + '-label'));
+    return labelEl ? labelEl.textContent : svgGroupId;
+  }
+
   function initMap() {
     const container = document.getElementById('mapContainer');
     if (typeof WORLD_MAP_SVG === 'undefined') return;
@@ -1327,6 +1338,7 @@
       if (mapDragMoved) return;
       const g = e.target.closest('g.country');
       if (!g) return;
+      if (!findCountry(g.id.toLowerCase())) return; // no curated data — nothing to select
       selectCountry(g.id.toLowerCase());
     });
 
@@ -1334,7 +1346,13 @@
       const g = e.target.closest('g.country');
       if (!g) return;
       const c = findCountry(g.id.toLowerCase());
-      if (!c) return;
+      if (!c) {
+        tooltip.innerHTML =
+          '<div class="tt-name">' + escapeHtml(getMapLabelName(g.id)) + '</div>' +
+          '<div class="tt-badge">尚無簽證資料</div>';
+        tooltip.hidden = false;
+        return;
+      }
       const fee = formatFee(c);
       const heritageCount = c.heritageSites ? c.heritageSites.length : 0;
       tooltip.innerHTML =
@@ -1375,13 +1393,26 @@
     Object.keys(mapGroups).forEach(function (id) {
       const g = mapGroups[id];
       const country = byId[id];
-      g.classList.remove('country', 'vfree', 'veta', 'vvoa', 'vevisa', 'vreq', 'vrestricted', 'in-route', 'dimmed', 'safety-orange', 'safety-red');
+      g.classList.remove('country', 'vfree', 'veta', 'vvoa', 'vevisa', 'vreq', 'vrestricted', 'in-route', 'dimmed', 'safety-orange', 'safety-red', 'no-data');
       g.removeAttribute('role');
       g.removeAttribute('aria-label');
       const existingTitle = g.querySelector(':scope > title');
       if (existingTitle) existingTitle.remove();
 
-      if (!country) return;
+      // 'country' is what makes a shape hoverable/clickable at all (see the mouseover/click
+      // handlers below) — apply it even without curated data, so at least the country's name
+      // (pulled from the SVG's own <text id="XX-label"> element) shows on hover instead of the
+      // shape being a dead, unlabeled area on the map.
+      if (!country) {
+        g.classList.add('country', 'no-data');
+        const name = getMapLabelName(g.id);
+        g.setAttribute('role', 'button');
+        g.setAttribute('aria-label', name + ' - 尚無簽證資料');
+        const noDataTitle = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+        noDataTitle.textContent = name + ' · 尚無簽證資料';
+        g.insertBefore(noDataTitle, g.firstChild);
+        return;
+      }
 
       g.classList.add('country', VISA_CLASS[country.visaType]);
       // deliberately not keyboard-focusable: 150+ map shapes in the tab order would bury
