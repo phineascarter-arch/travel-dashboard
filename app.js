@@ -1015,16 +1015,11 @@
     selectedId = id;
     renderGrid();
     renderMap();
+    // Matches the search box's behaviour: just bring the selected country to the front of the
+    // (already-rendered, already-visible) list and highlight it — no page-level scroll/jump.
     const grid = document.getElementById('countryGrid');
     grid.scrollTop = 0;
-    // Target the actual selected card (not the grid container) so scrollIntoView's ancestor
-    // walk brings it fully into the viewport, including scrolling the page itself past the
-    // map above it — calling it on the container only guaranteed the container's *top edge*
-    // was reachable, not that the browser would actually scroll the outer page to reveal it.
     const card = grid.querySelector('.country-card.highlighted');
-    if (card) card.scrollIntoView({ block: 'start' });
-    history.replaceState(null, '', location.pathname + location.search);
-    location.hash = 'countryGrid';
     if (card) {
       card.classList.remove('just-selected');
       // eslint-disable-next-line no-unused-expressions
