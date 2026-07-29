@@ -1009,12 +1009,22 @@
     const escaped = window.CSS && CSS.escape ? CSS.escape(id) : id;
     const el = document.querySelector('.country-card[data-id="' + escaped + '"]');
     if (!el) return;
-    // The destination list is its own scroll box (independent from the page), so a single
-    // scrollIntoView() on the card only scrolls within that box — the page itself never
-    // moves to bring the (possibly far down the page) list into view. Two explicit calls,
-    // one per scroll container, cover both levels.
-    document.getElementById('countryGrid').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // The destination list is its own scroll box nested inside the page. scrollIntoView()'s
+    // built-in ancestor-walking was unreliable for this two-level case in practice, so both
+    // levels are scrolled explicitly instead: getBoundingClientRect() deltas (viewport-relative,
+    // so they're correct regardless of CSS positioning/offsetParent quirks) give the exact
+    // scrollTop the list needs to center the card, and the same math against the window gives
+    // the page scroll needed to bring the list itself into view.
+    const grid = document.getElementById('countryGrid');
+    const gridRect = grid.getBoundingClientRect();
+    const cardRect = el.getBoundingClientRect();
+
+    const cardOffsetInGrid = (cardRect.top - gridRect.top) + grid.scrollTop;
+    const gridTargetScrollTop = cardOffsetInGrid - (grid.clientHeight / 2) + (cardRect.height / 2);
+    grid.scrollTo({ top: Math.max(0, gridTargetScrollTop), behavior: 'smooth' });
+
+    const pageTargetScrollY = window.scrollY + gridRect.top - 80;
+    window.scrollTo({ top: Math.max(0, pageTargetScrollY), behavior: 'smooth' });
   }
 
   // ---------- modal ----------
@@ -1478,7 +1488,11 @@
     viewport.addEventListener('pointermove', function (e) {
       if (!mapDragging) return;
       const nx = e.clientX - dragStartX, ny = e.clientY - dragStartY;
-      if (Math.abs(nx - panX) > 3 || Math.abs(ny - panY) > 3) mapDragMoved = true;
+      // Threshold needs to be forgiving enough that an ordinary mouse/trackpad click (which
+      // almost always has a pixel or two of incidental movement between press and release)
+      // still registers as a click and not a pan-drag, which would otherwise silently swallow
+      // the click before it ever reaches the country click handler below.
+      if (Math.abs(nx - panX) > 8 || Math.abs(ny - panY) > 8) mapDragMoved = true;
       panX = nx; panY = ny;
       applyMapTransform();
     });
