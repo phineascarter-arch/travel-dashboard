@@ -322,12 +322,12 @@
       return a.name.localeCompare(b.name, 'zh-Hant');
     });
 
-    // Clicking a country on the map should make it the first card in the destination list
-    // below, not just scrolled into view — bump it to the front, ahead of the normal
-    // region/alphabetical order, if it's currently in the filtered results at all.
+    // Clicking a country on the map should narrow the destination list down to just that one
+    // country, the same as typing its name into the search box would — not merely reorder it
+    // to the front among everything else. Matched by id (not name) so it can't accidentally
+    // also match an unrelated country with an overlapping substring in its name.
     if (selectedId) {
-      const idx = list.findIndex(function (c) { return c.id === selectedId; });
-      if (idx > 0) list.unshift(list.splice(idx, 1)[0]);
+      list = list.filter(function (c) { return c.id === selectedId; });
     }
 
     return list;
@@ -965,6 +965,11 @@
   }
 
   function onFiltersChanged() {
+    // Manually touching any filter control always wins over a map click's single-country lock
+    // (see selectCountry) — otherwise editing the search box the map click pre-filled would
+    // look like it does nothing, since the stale lock would keep restricting the list to the
+    // one country regardless of what's typed.
+    selectedId = null;
     renderGrid();
     renderMap();
   }
@@ -1013,10 +1018,14 @@
 
   function selectCountry(id) {
     selectedId = id;
+    // Show the country's name in the search box too, purely as a visible explanation of why
+    // the list below just narrowed to one card — editing that text is itself what clears the
+    // selection (see onFiltersChanged), so this stays honest rather than being a dead label.
+    const country = findCountry(id);
+    const searchInput = document.getElementById('searchInput');
+    if (country && searchInput) searchInput.value = country.name;
     renderGrid();
     renderMap();
-    // Matches the search box's behaviour: just bring the selected country to the front of the
-    // (already-rendered, already-visible) list and highlight it — no page-level scroll/jump.
     const grid = document.getElementById('countryGrid');
     grid.scrollTop = 0;
     const card = grid.querySelector('.country-card.highlighted');
