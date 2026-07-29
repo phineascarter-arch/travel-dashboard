@@ -1341,13 +1341,10 @@
     routeLinesLayer.setAttribute('id', 'routeLinesLayer');
     mapSvg.appendChild(routeLinesLayer);
 
-    mapSvg.addEventListener('click', function (e) {
-      if (mapDragMoved) return;
-      const g = e.target.closest('g.country');
-      if (!g) return;
-      if (!findCountry(g.id.toLowerCase())) return; // no curated data — nothing to select
-      selectCountry(g.id.toLowerCase());
-    });
+    // Country selection is handled in the pointerup listener below (via setupMapZoomPan),
+    // not here — while the pointer is captured for pan-dragging, the click event paired with
+    // this interaction gets its target retargeted to the capturing viewport element, so
+    // e.target.closest('g.country') can never resolve correctly for a real click.
 
     mapSvg.addEventListener('mouseover', function (e) {
       const g = e.target.closest('g.country');
@@ -1557,17 +1554,27 @@
     function endDrag(e) {
       mapDragging = false;
       viewport.classList.remove('grabbing');
-      // While the pointer is captured, the spec retargets the mouseup/click events paired with
-      // this pointerup to the CAPTURING element (viewport) instead of hit-testing normally — so
-      // e.target.closest('g.country') in the click handler below always resolves to nothing and
-      // every real click is silently swallowed, even a perfectly still one. Releasing capture
-      // here, before click fires, restores normal hit-testing for it.
       if (e && e.pointerId != null && viewport.hasPointerCapture(e.pointerId)) {
         viewport.releasePointerCapture(e.pointerId);
       }
       setTimeout(function () { mapDragMoved = false; }, 0);
     }
-    viewport.addEventListener('pointerup', endDrag);
+    viewport.addEventListener('pointerup', function (e) {
+      const wasClick = !mapDragMoved;
+      endDrag(e);
+      if (!wasClick) return;
+      // Releasing capture above still isn't enough on its own: capture was already active back
+      // when pointerdown/mousedown fired for this same interaction, and a browser's click target
+      // is the common ancestor of the mousedown target and the mouseup target — so a captured
+      // mousedown (retargeted to viewport, an ANCESTOR of every country shape) poisons the click
+      // target regardless of when capture is released afterwards. Skip the click event entirely
+      // and hit-test directly from the pointerup coordinates instead.
+      const hit = document.elementFromPoint(e.clientX, e.clientY);
+      const g = hit && hit.closest('g.country');
+      if (!g) return;
+      if (!findCountry(g.id.toLowerCase())) return; // no curated data — nothing to select
+      selectCountry(g.id.toLowerCase());
+    });
     viewport.addEventListener('pointercancel', endDrag);
 
     viewport.addEventListener('dblclick', function () {
