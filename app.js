@@ -1554,9 +1554,17 @@
       panX = nx; panY = ny;
       applyMapTransform();
     });
-    function endDrag() {
+    function endDrag(e) {
       mapDragging = false;
       viewport.classList.remove('grabbing');
+      // While the pointer is captured, the spec retargets the mouseup/click events paired with
+      // this pointerup to the CAPTURING element (viewport) instead of hit-testing normally — so
+      // e.target.closest('g.country') in the click handler below always resolves to nothing and
+      // every real click is silently swallowed, even a perfectly still one. Releasing capture
+      // here, before click fires, restores normal hit-testing for it.
+      if (e && e.pointerId != null && viewport.hasPointerCapture(e.pointerId)) {
+        viewport.releasePointerCapture(e.pointerId);
+      }
       setTimeout(function () { mapDragMoved = false; }, 0);
     }
     viewport.addEventListener('pointerup', endDrag);
