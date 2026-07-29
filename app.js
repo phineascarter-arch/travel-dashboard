@@ -1015,15 +1015,22 @@
     selectedId = id;
     renderGrid();
     renderMap();
-    document.getElementById('countryGrid').scrollTop = 0;
-    // JS scrollIntoView()/scrollTo() calls proved unreliable in practice for this two-level
-    // (page scroll + inner list scrollbox) case across browsers/devices. Native URL-fragment
-    // navigation uses the browser's own long-established anchor-jump scrolling instead, which
-    // walks every scrollable ancestor correctly without any custom math. Clear the hash first
-    // so re-selecting the same target (or clicking the same country twice) still re-triggers
-    // the jump — browsers only scroll on an actual hash *change*.
+    const grid = document.getElementById('countryGrid');
+    grid.scrollTop = 0;
+    // Target the actual selected card (not the grid container) so scrollIntoView's ancestor
+    // walk brings it fully into the viewport, including scrolling the page itself past the
+    // map above it — calling it on the container only guaranteed the container's *top edge*
+    // was reachable, not that the browser would actually scroll the outer page to reveal it.
+    const card = grid.querySelector('.country-card.highlighted');
+    if (card) card.scrollIntoView({ block: 'start' });
     history.replaceState(null, '', location.pathname + location.search);
     location.hash = 'countryGrid';
+    if (card) {
+      card.classList.remove('just-selected');
+      // eslint-disable-next-line no-unused-expressions
+      void card.offsetWidth; // restart the CSS animation even if the same card flashes twice in a row
+      card.classList.add('just-selected');
+    }
   }
 
   // ---------- modal ----------
@@ -1485,7 +1492,7 @@
 
   // ---------- zoom & pan ----------
   let zoomScale = 1, panX = 0, panY = 0;
-  let mapDragging = false, mapDragMoved = false, dragStartX = 0, dragStartY = 0;
+  let mapDragging = false, mapDragMoved = false, dragStartX = 0, dragStartY = 0, dragStartPanX = 0, dragStartPanY = 0;
 
   function applyMapTransform() {
     mapSvg.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomScale + ')';
@@ -1529,17 +1536,21 @@
       mapDragMoved = false;
       dragStartX = e.clientX - panX;
       dragStartY = e.clientY - panY;
+      dragStartPanX = panX;
+      dragStartPanY = panY;
       viewport.setPointerCapture(e.pointerId);
       viewport.classList.add('grabbing');
     });
     viewport.addEventListener('pointermove', function (e) {
       if (!mapDragging) return;
       const nx = e.clientX - dragStartX, ny = e.clientY - dragStartY;
-      // Threshold needs to be forgiving enough that an ordinary mouse/trackpad click (which
-      // almost always has a pixel or two of incidental movement between press and release)
-      // still registers as a click and not a pan-drag, which would otherwise silently swallow
-      // the click before it ever reaches the country click handler below.
-      if (Math.abs(nx - panX) > 8 || Math.abs(ny - panY) > 8) mapDragMoved = true;
+      // Compare against the pan position at press-down (not the continuously-updated panX/panY),
+      // i.e. total displacement since the click started, not the delta since the last pointermove.
+      // Comparing against the live panX/panY under-counted real drags spread across many small
+      // move events, and could also over-count on low-sample-rate input (touch/some trackpads)
+      // where a single event reports a jump — either way it made click-vs-drag detection
+      // unreliable for real pointer input even though it looked fine in single-event tests.
+      if (!mapDragMoved && (Math.abs(nx - dragStartPanX) > 8 || Math.abs(ny - dragStartPanY) > 8)) mapDragMoved = true;
       panX = nx; panY = ny;
       applyMapTransform();
     });

@@ -477,6 +477,11 @@ a { color: var(--gold-bright); }
 }
 .country-card:hover { box-shadow: 0 0 14px rgba(232, 184, 79, 0.18); transform: translateY(-1px); }
 .country-card.highlighted { box-shadow: 0 0 0 2px var(--gold-bright), 0 0 16px rgba(255, 224, 138, 0.5); }
+.country-card.just-selected { animation: card-flash 1s ease-out; }
+@keyframes card-flash {
+  0% { box-shadow: 0 0 0 3px var(--gold-bright), 0 0 30px rgba(255, 224, 138, 0.9); background: rgba(255, 224, 138, 0.12); }
+  100% { box-shadow: 0 0 0 2px var(--gold-bright), 0 0 16px rgba(255, 224, 138, 0.5); background: var(--bg-inset); }
+}
 
 .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .card-name { font-weight: 700; font-size: 1.6rem; color: var(--text); }
