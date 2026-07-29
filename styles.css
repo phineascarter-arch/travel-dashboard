@@ -267,13 +267,13 @@ a { color: var(--gold-bright); }
   background: rgba(5, 8, 15, 0.72);
   border: 1px solid var(--border);
   border-radius: 4px;
-  padding: 8px 10px;
+  padding: 12px 14px;
   font-family: var(--mono);
-  font-size: 0.7rem;
+  font-size: 0.95rem;
   backdrop-filter: blur(2px);
 }
-.legend-item { display: flex; align-items: center; gap: 6px; color: var(--text-dim); }
-.legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex: none; }
+.legend-item { display: flex; align-items: center; gap: 8px; color: var(--text-dim); }
+.legend-swatch { width: 14px; height: 14px; border-radius: 2px; flex: none; }
 .legend-sep { height: 1px; background: var(--border); margin: 4px 0; }
 .legend-swatch-outline { background: transparent; border: 2px solid; border-radius: 2px; }
 
@@ -293,10 +293,10 @@ a { color: var(--gold-bright); }
 .map-hint {
   text-align: center;
   font-family: var(--mono);
-  font-size: 0.68rem;
+  font-size: 0.85rem;
   color: var(--text-dim);
   letter-spacing: 0.5px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .map-tooltip {
@@ -305,15 +305,15 @@ a { color: var(--gold-bright); }
   background: rgba(6, 10, 20, 0.95);
   border: 1px solid var(--gold);
   border-radius: 4px;
-  padding: 8px 10px;
-  font-size: 0.78rem;
+  padding: 10px 12px;
+  font-size: 0.95rem;
   color: var(--text);
   pointer-events: none;
   box-shadow: 0 0 14px rgba(232, 184, 79, 0.35);
-  max-width: 220px;
+  max-width: 280px;
 }
-.map-tooltip .tt-name { font-weight: 700; color: var(--gold-bright); font-family: var(--mono); }
-.map-tooltip .tt-badge { font-family: var(--mono); font-size: 0.68rem; }
+.map-tooltip .tt-name { font-weight: 700; color: var(--gold-bright); font-family: var(--mono); font-size: 1.05rem; }
+.map-tooltip .tt-badge { font-family: var(--mono); font-size: 0.85rem; }
 
 /* svg country base styling (overrides embedded presentation attributes) */
 .world-map-svg path,
