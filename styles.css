@@ -332,6 +332,15 @@ a { color: var(--gold-bright); }
 .world-map-svg g.country { cursor: pointer; }
 .world-map-svg g.country:focus { outline: none; }
 
+/* country-name labels baked into the SVG use tiny presentation-attribute font sizes
+   (2/5/8 user units) tuned for a much smaller map; scale each tier up so labels are
+   legible at the current (much larger) map size while keeping big/small countries'
+   relative label-size hierarchy intact. */
+.world-map-svg text[font-size="2"] { font-size: 4px; }
+.world-map-svg text[font-size="5"] { font-size: 8px; }
+.world-map-svg text[font-size="8"] { font-size: 12px; }
+.world-map-svg text { fill: var(--text-dim); pointer-events: none; }
+
 .world-map-svg g.vfree path, .world-map-svg g.vfree circle { fill: rgba(57,255,142,0.28); stroke: var(--c-free); }
 .world-map-svg g.veta path, .world-map-svg g.veta circle { fill: rgba(79,214,255,0.28); stroke: var(--c-eta); }
 .world-map-svg g.vvoa path, .world-map-svg g.vvoa circle { fill: rgba(255,157,63,0.28); stroke: var(--c-voa); }
@@ -420,11 +429,11 @@ a { color: var(--gold-bright); }
 /* ---------- country cards ---------- */
 .country-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 12px;
-  max-height: 60vh;
-  overflow-y: auto;
-  padding-right: 4px;
+}
+@media (max-width: 640px) {
+  .country-grid { grid-template-columns: 1fr; }
 }
 
 .country-card {
