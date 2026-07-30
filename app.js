@@ -123,6 +123,15 @@
     return getAllCountries().find(function (c) { return c.id === id; });
   }
 
+  // Every country id in this dataset is its ISO 3166-1 alpha-2 code (lowercase), which is
+  // exactly what's needed to build the matching flag emoji from the two Unicode regional
+  // indicator symbols — no separate flag data/images to maintain.
+  function flagEmoji(id) {
+    if (!id || id.length !== 2) return '';
+    const codePoints = id.toUpperCase().split('').map(function (ch) { return 127397 + ch.charCodeAt(0); });
+    return String.fromCodePoint.apply(null, codePoints);
+  }
+
   function formatFee(country) {
     if (country.fee === null || country.fee === undefined) {
       return country.visaType === 'visa_free' ? '' : '費用待查證';
@@ -395,7 +404,7 @@
       return (
         '<div class="country-card' + highlighted + '" data-id="' + c.id + '">' +
           '<div class="card-top">' +
-            '<div><div class="card-name">' + escapeHtml(c.name) + '</div>' +
+            '<div><div class="card-name">' + flagEmoji(c.id) + ' ' + escapeHtml(c.name) + '</div>' +
             (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + '</div>' : '') + '</div>' +
             '<div class="card-badges"><span class="badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</span>' + safetyBadge + heritageBadge + vaccineBadge + '</div>' +
           '</div>' +
@@ -1356,7 +1365,7 @@
       const c = findCountry(g.id.toLowerCase());
       if (!c) {
         tooltip.innerHTML =
-          '<div class="tt-name">' + escapeHtml(getMapLabelName(g.id)) + '</div>' +
+          '<div class="tt-name">' + flagEmoji(g.id) + ' ' + escapeHtml(getMapLabelName(g.id)) + '</div>' +
           '<div class="tt-badge">尚無簽證資料</div>';
         tooltip.hidden = false;
         return;
@@ -1364,7 +1373,7 @@
       const fee = formatFee(c);
       const heritageCount = c.heritageSites ? c.heritageSites.length : 0;
       tooltip.innerHTML =
-        '<div class="tt-name">' + escapeHtml(c.name) + '</div>' +
+        '<div class="tt-name">' + flagEmoji(c.id) + ' ' + escapeHtml(c.name) + '</div>' +
         '<div class="tt-badge badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</div>' +
         (c.stayDays ? '<div>可停留 ' + c.stayDays + ' 天</div>' : '') +
         (fee ? '<div>' + escapeHtml(fee) + '</div>' : '') +
