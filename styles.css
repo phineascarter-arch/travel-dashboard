@@ -629,7 +629,7 @@ a { color: var(--gold-bright); }
   background: var(--bg-inset);
   padding: 8px 0 12px;
 }
-.timeline-track { position: relative; min-width: 100%; }
+.timeline-track { position: relative; min-width: 100%; display: flow-root; }
 
 .timeline-month-line {
   position: absolute;
