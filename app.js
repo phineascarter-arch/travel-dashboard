@@ -1,3 +1,5 @@
+import { animate, stagger } from 'motion';
+
 (function () {
   'use strict';
 
@@ -434,6 +436,8 @@
         '</div>'
       );
     }).join('');
+
+    animate(grid.querySelectorAll('.country-card'), { opacity: [0, 1], y: [8, 0] }, { duration: 0.25, delay: stagger(0.03), ease: 'ease-out' });
   }
 
   function renderCitySectionHtml(stopId, stopDurationDays) {
@@ -846,6 +850,8 @@
     else state.checklist.done[id] = true;
     saveState();
     renderChecklist();
+    const li = document.querySelector('.checklist-item[data-id="' + id + '"]');
+    if (li) animate(li, { scale: [1, 1.04, 1] }, { duration: 0.22, ease: 'ease-out' });
   }
 
   function addChecklistItem(scope, countryId, label) {
@@ -876,7 +882,7 @@
       const isCustom = it.id.indexOf('gc_') === 0 || it.id.indexOf('cc_') === 0;
       const done = !!state.checklist.done[it.id];
       return (
-        '<li class="checklist-item' + (done ? ' done' : '') + '">' +
+        '<li class="checklist-item' + (done ? ' done' : '') + '" data-id="' + it.id + '">' +
           '<input type="checkbox" data-action="cl-toggle" data-id="' + it.id + '"' + (done ? ' checked' : '') + '>' +
           '<span class="cl-label">' + escapeHtml(it.label) + '</span>' +
           (isCustom ? '<button type="button" class="cl-remove" data-action="cl-remove" data-scope="' + scope + '" data-country="' + (countryId || '') + '" data-id="' + it.id + '" title="刪除">✕</button>' : '') +
