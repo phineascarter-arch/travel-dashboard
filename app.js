@@ -386,8 +386,8 @@
       const personal = state.personalNotes[c.id] ? '<div class="card-personal-note">📝 ' + escapeHtml(state.personalNotes[c.id]) + '</div>' : '';
       const stayLine = c.stayDays ? ('可停留 ' + c.stayDays + ' 天') : '';
       const feeLine = formatFee(c);
-      const powerLine = c.powerVoltage ? ('🔌 ' + c.powerVoltage + (c.powerPlug ? '・Type ' + c.powerPlug : '')) : '';
-      const metaBits = [REGION_LABELS[c.region] || c.region, stayLine, feeLine, powerLine].filter(Boolean);
+      const metaBits = [REGION_LABELS[c.region] || c.region, stayLine, feeLine].filter(Boolean);
+      const powerLine = c.powerVoltage ? ('<div class="card-power">🔌 ' + escapeHtml(c.powerVoltage) + (c.powerPlug ? '・Type ' + escapeHtml(c.powerPlug) : '') + '</div>') : '';
       const highlighted = c.id === selectedId ? ' highlighted' : '';
       const safetyBadge = c.safetyLevel ? '<span class="badge safety-badge-' + c.safetyLevel + '">🛡 ' + SAFETY_LABELS[c.safetyLevel] + '</span>' : '';
       const safetyNoteLine = c.safetyNote ? '<div class="card-safety-note">🛡 ' + escapeHtml(c.safetyNote) + '</div>' : '';
@@ -410,6 +410,7 @@
             '<div class="card-badges"><span class="badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</span>' + safetyBadge + heritageBadge + vaccineBadge + '</div>' +
           '</div>' +
           '<div class="card-meta">' + metaBits.map(function (b) { return '<span>' + escapeHtml(b) + '</span>'; }).join('') + '</div>' +
+          powerLine +
           note +
           safetyNoteLine +
           healthNoteLine +
