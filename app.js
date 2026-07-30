@@ -389,6 +389,7 @@
       const feeLine = formatFee(c);
       const metaBits = [REGION_LABELS[c.region] || c.region, stayLine, feeLine].filter(Boolean);
       const powerLine = c.powerVoltage ? ('<div class="card-power">🔌 ' + escapeHtml(c.powerVoltage) + (c.powerPlug ? '・Type ' + escapeHtml(c.powerPlug) : '') + '</div>') : '';
+      const seasonLine = c.bestSeason ? ('<div class="card-season">☀️ ' + escapeHtml(c.bestSeason) + '</div>') : '';
       const highlighted = c.id === selectedId ? ' highlighted' : '';
       const safetyBadge = c.safetyLevel ? '<span class="badge safety-badge-' + c.safetyLevel + '">🛡 ' + SAFETY_LABELS[c.safetyLevel] + '</span>' : '';
       const safetyNoteLine = c.safetyNote ? '<div class="card-safety-note">🛡 ' + escapeHtml(c.safetyNote) + '</div>' : '';
@@ -412,6 +413,7 @@
           '</div>' +
           '<div class="card-meta">' + metaBits.map(function (b) { return '<span>' + escapeHtml(b) + '</span>'; }).join('') + '</div>' +
           powerLine +
+          seasonLine +
           note +
           safetyNoteLine +
           healthNoteLine +

@@ -531,6 +531,7 @@ a { color: var(--gold-bright); }
 
 .card-meta { font-size: 1.08rem; color: var(--text-dim); display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; font-family: var(--mono); }
 .card-power { font-size: 1.02rem; color: var(--text-dim); font-family: var(--mono); }
+.card-season { font-size: 1.02rem; color: var(--text-dim); }
 .card-note { font-size: 1.04rem; color: var(--text-dim); font-style: italic; }
 .card-personal-note { font-size: 1.04rem; color: #9be89a; background: rgba(57,255,142,0.08); border-radius: 4px; padding: 5px 9px; border: 1px solid rgba(57,255,142,0.2); }
 
