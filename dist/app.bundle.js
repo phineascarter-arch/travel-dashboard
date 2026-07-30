@@ -4880,6 +4880,160 @@
       booked: "\u{1F3AB} \u5DF2\u8A02\u7968/\u8A02\u623F",
       done: "\u2705 \u5DF2\u5B8C\u6210"
     };
+    const COUNTRY_CURRENCY = {
+      jp: "JPY",
+      kr: "KRW",
+      hk: "HKD",
+      mo: "MOP",
+      sg: "SGD",
+      my: "MYR",
+      bn: "BND",
+      th: "THB",
+      ph: "PHP",
+      vn: "VND",
+      kh: "KHR",
+      la: "LAK",
+      mm: "MMK",
+      id: "IDR",
+      tl: "USD",
+      in: "INR",
+      np: "NPR",
+      lk: "LKR",
+      bd: "BDT",
+      mv: "MVR",
+      mn: "MNT",
+      kz: "KZT",
+      kg: "KGS",
+      ae: "AED",
+      qa: "QAR",
+      jo: "JOD",
+      tr: "TRY",
+      bh: "BHD",
+      bt: "BTN",
+      pk: "PKR",
+      iq: "IQD",
+      sy: "SYP",
+      tj: "TJS",
+      tm: "TMT",
+      ua: "UAH",
+      af: "AFN",
+      am: "AMD",
+      ru: "RUB",
+      fr: "EUR",
+      de: "EUR",
+      it: "EUR",
+      es: "EUR",
+      pt: "EUR",
+      nl: "EUR",
+      at: "EUR",
+      ch: "CHF",
+      gr: "EUR",
+      cz: "CZK",
+      pl: "PLN",
+      hu: "HUF",
+      hr: "EUR",
+      se: "SEK",
+      no: "NOK",
+      is: "ISK",
+      be: "EUR",
+      dk: "DKK",
+      fi: "EUR",
+      lu: "EUR",
+      mt: "EUR",
+      si: "EUR",
+      sk: "EUR",
+      ee: "EUR",
+      lv: "EUR",
+      lt: "EUR",
+      bg: "BGN",
+      ro: "RON",
+      li: "CHF",
+      gb: "GBP",
+      ie: "EUR",
+      al: "ALL",
+      ad: "EUR",
+      ba: "BAM",
+      cy: "EUR",
+      sm: "EUR",
+      rs: "RSD",
+      me: "EUR",
+      mk: "MKD",
+      by: "BYN",
+      az: "AZN",
+      ge: "GEL",
+      md: "MDL",
+      us: "USD",
+      ca: "CAD",
+      mx: "MXN",
+      ag: "XCD",
+      bz: "BZD",
+      cl: "CLP",
+      cr: "CRC",
+      dm: "XCD",
+      do: "DOP",
+      ec: "USD",
+      gt: "GTQ",
+      ht: "HTG",
+      hn: "HNL",
+      jm: "JMD",
+      pa: "PAB",
+      py: "PYG",
+      lc: "XCD",
+      vc: "XCD",
+      sr: "SRD",
+      bs: "BSD",
+      bo: "BOB",
+      co: "COP",
+      cu: "CUP",
+      ni: "NIO",
+      kn: "XCD",
+      tt: "TTD",
+      pe: "PEN",
+      ar: "ARS",
+      br: "BRL",
+      bb: "BBD",
+      sv: "USD",
+      gd: "XCD",
+      uy: "UYU",
+      gy: "GYD",
+      ve: "VES",
+      fj: "FJD",
+      mh: "USD",
+      fm: "USD",
+      pw: "USD",
+      ws: "WST",
+      tv: "AUD",
+      nr: "AUD",
+      au: "AUD",
+      nz: "NZD",
+      pg: "PGK",
+      ki: "AUD",
+      to: "TOP",
+      sb: "SBD",
+      sz: "SZL",
+      gm: "GMD",
+      sc: "SCR",
+      ls: "LSL",
+      ml: "XOF",
+      mu: "MUR",
+      sn: "XOF",
+      za: "ZAR",
+      eg: "EGP",
+      ke: "KES",
+      ma: "MAD",
+      mz: "MZN",
+      sd: "SDG",
+      tn: "TND",
+      dz: "DZD",
+      et: "ETB",
+      rw: "RWF",
+      tz: "TZS",
+      ug: "UGX",
+      ng: "NGN",
+      mg: "MGA",
+      na: "NAD",
+      mw: "MWK"
+    };
     const GENERAL_CHECKLIST = [
       { id: "g_passport", label: "\u8B77\u7167\u6548\u671F\u9084\u67096\u500B\u6708\u4EE5\u4E0A" },
       { id: "g_copies", label: "\u8B77\u7167/\u7C3D\u8B49\u5F71\u672C\uFF08\u7D19\u672C\uFF0B\u96F2\u7AEF\u5099\u4EFD\uFF09" },
@@ -6180,34 +6334,59 @@
         const legA = findCountry(points[i].id), legB = findCountry(points[i + 1].id);
         const leg = computeLeg(points[i].stopId, legA, points[i + 1].stopId, legB);
         if (leg) {
-          const label = document.createElementNS(svgNS, "text");
-          label.setAttribute("class", "route-leg-label");
-          label.setAttribute("x", (points[i].x + points[i + 1].x) / 2);
-          label.setAttribute("y", (points[i].y + points[i + 1].y) / 2 - 2);
-          label.textContent = TRANSPORT_ICONS[leg.mode] + " " + fmtKm(leg.km) + " \xB7 " + fmtHours(leg.hours);
-          routeLinesLayer.appendChild(label);
+          const lx = (points[i].x + points[i + 1].x) / 2, ly = (points[i].y + points[i + 1].y) / 2 - 2;
+          appendScaledMarker(routeLinesLayer, lx, ly, function(g) {
+            const label = document.createElementNS(svgNS, "text");
+            label.setAttribute("class", "route-leg-label");
+            label.setAttribute("x", lx);
+            label.setAttribute("y", ly);
+            label.textContent = TRANSPORT_ICONS[leg.mode] + " " + fmtKm(leg.km) + " \xB7 " + fmtHours(leg.hours);
+            g.appendChild(label);
+          });
         }
       }
       points.forEach(function(p) {
-        const dot = document.createElementNS(svgNS, "circle");
-        dot.setAttribute("class", "route-dot");
-        dot.setAttribute("cx", p.x);
-        dot.setAttribute("cy", p.y);
-        dot.setAttribute("r", 4.5);
-        routeLinesLayer.appendChild(dot);
-        const text = document.createElementNS(svgNS, "text");
-        text.setAttribute("class", "route-order");
-        text.setAttribute("x", p.x);
-        text.setAttribute("y", p.y);
-        text.textContent = p.order;
-        routeLinesLayer.appendChild(text);
+        appendScaledMarker(routeLinesLayer, p.x, p.y, function(g) {
+          const dot = document.createElementNS(svgNS, "circle");
+          dot.setAttribute("class", "route-dot");
+          dot.setAttribute("cx", p.x);
+          dot.setAttribute("cy", p.y);
+          dot.setAttribute("r", 4.5);
+          g.appendChild(dot);
+          const text = document.createElementNS(svgNS, "text");
+          text.setAttribute("class", "route-order");
+          text.setAttribute("x", p.x);
+          text.setAttribute("y", p.y);
+          text.textContent = p.order;
+          g.appendChild(text);
+        });
       });
       fitMapToPoints(points);
+    }
+    function appendScaledMarker(parent, px2, py, buildFn) {
+      const svgNS = "http://www.w3.org/2000/svg";
+      const g = document.createElementNS(svgNS, "g");
+      g.setAttribute("class", "route-marker-scale");
+      g.setAttribute("data-px", px2);
+      g.setAttribute("data-py", py);
+      g.setAttribute("transform", markerScaleTransform(px2, py));
+      buildFn(g);
+      parent.appendChild(g);
+      return g;
+    }
+    function markerScaleTransform(px2, py) {
+      const s = 1 / zoomScale;
+      return "translate(" + px2 + "," + py + ") scale(" + s + ") translate(" + -px2 + "," + -py + ")";
     }
     let zoomScale = 1, panX = 0, panY = 0;
     let mapDragging = false, mapDragMoved = false, dragStartX = 0, dragStartY = 0, dragStartPanX = 0, dragStartPanY = 0;
     function applyMapTransform() {
       mapSvg.style.transform = "translate(" + panX + "px," + panY + "px) scale(" + zoomScale + ")";
+      if (routeLinesLayer) {
+        routeLinesLayer.querySelectorAll(".route-marker-scale").forEach(function(g) {
+          g.setAttribute("transform", markerScaleTransform(g.getAttribute("data-px"), g.getAttribute("data-py")));
+        });
+      }
     }
     let timelineMapUserAdjusted = false;
     let lastFitRouteKey = null;
@@ -6465,6 +6644,20 @@
       }).join("");
       fromSel.value = codes.indexOf("USD") !== -1 ? "USD" : codes[0];
       toSel.value = codes.indexOf("TWD") !== -1 ? "TWD" : codes[0];
+    }
+    function populateConverterCountrySelects() {
+      const withCurrency = getAllCountries().filter(function(c) {
+        return COUNTRY_CURRENCY[c.id];
+      }).sort(function(a, b) {
+        return a.name.localeCompare(b.name, "zh-Hant");
+      });
+      const optionsHtml = '<option value="">\uFF0D \u9078\u64C7\u570B\u5BB6 \uFF0D</option>' + withCurrency.map(function(c) {
+        return '<option value="' + c.id + '">' + escapeHtml(c.name) + "\uFF08" + COUNTRY_CURRENCY[c.id] + "\uFF09</option>";
+      }).join("");
+      ["convFromCountry", "convToCountry"].forEach(function(id) {
+        const sel = document.getElementById(id);
+        if (sel) sel.innerHTML = optionsHtml;
+      });
     }
     function currencyOptionsHtml(selected, codes) {
       return codes.map(function(c) {
@@ -6852,6 +7045,21 @@
       t.value = tmp;
       renderConverter();
     });
+    [["convFromCountry", "convFrom"], ["convToCountry", "convTo"]].forEach(function(pair) {
+      const countrySel = document.getElementById(pair[0]);
+      const currencySel = document.getElementById(pair[1]);
+      countrySel.addEventListener("change", function() {
+        const countryId = this.value;
+        if (!countryId) return;
+        const code = COUNTRY_CURRENCY[countryId];
+        const hasRate = rates && Object.prototype.hasOwnProperty.call(rates, code);
+        document.getElementById("convRateLine").textContent = hasRate ? "" : "\u26A0 \u76EE\u524D\u67E5\u7121 " + code + " \u7684\u5373\u6642\u532F\u7387\uFF0C\u7121\u6CD5\u81EA\u52D5\u4EE3\u5165";
+        if (hasRate) {
+          currencySel.value = code;
+          renderConverter();
+        }
+      });
+    });
     document.getElementById("availableFunds").addEventListener("input", function() {
       state.budget.availableFunds = this.value === "" ? null : Number(this.value);
       saveState();
@@ -6889,6 +7097,7 @@
     }
     initMap();
     initRates();
+    populateConverterCountrySelects();
     renderAll();
     switchTab(localStorage.getItem(TAB_STORAGE_KEY) || "map");
     setInterval(updateRouteClocks, 6e4);

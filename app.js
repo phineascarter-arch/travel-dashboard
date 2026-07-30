@@ -44,6 +44,34 @@ import { animate, stagger } from 'motion';
     done: '✅ 已完成',
   };
 
+  // Local circulating currency per country (ISO 4217) — distinct from a country's `feeCurrency`,
+  // which is just whatever the visa fee happens to be billed in (often USD regardless of what's
+  // actually used on the ground, e.g. Cambodia/Laos). Lets the converter's country picker fill
+  // in a currency code without the user needing to already know it.
+  const COUNTRY_CURRENCY = {
+    jp: 'JPY', kr: 'KRW', hk: 'HKD', mo: 'MOP', sg: 'SGD', my: 'MYR', bn: 'BND', th: 'THB',
+    ph: 'PHP', vn: 'VND', kh: 'KHR', la: 'LAK', mm: 'MMK', id: 'IDR', tl: 'USD', in: 'INR',
+    np: 'NPR', lk: 'LKR', bd: 'BDT', mv: 'MVR', mn: 'MNT', kz: 'KZT', kg: 'KGS', ae: 'AED',
+    qa: 'QAR', jo: 'JOD', tr: 'TRY', bh: 'BHD', bt: 'BTN', pk: 'PKR', iq: 'IQD', sy: 'SYP',
+    tj: 'TJS', tm: 'TMT', ua: 'UAH', af: 'AFN', am: 'AMD', ru: 'RUB',
+    fr: 'EUR', de: 'EUR', it: 'EUR', es: 'EUR', pt: 'EUR', nl: 'EUR', at: 'EUR', ch: 'CHF',
+    gr: 'EUR', cz: 'CZK', pl: 'PLN', hu: 'HUF', hr: 'EUR', se: 'SEK', no: 'NOK', is: 'ISK',
+    be: 'EUR', dk: 'DKK', fi: 'EUR', lu: 'EUR', mt: 'EUR', si: 'EUR', sk: 'EUR', ee: 'EUR',
+    lv: 'EUR', lt: 'EUR', bg: 'BGN', ro: 'RON', li: 'CHF', gb: 'GBP', ie: 'EUR', al: 'ALL',
+    ad: 'EUR', ba: 'BAM', cy: 'EUR', sm: 'EUR', rs: 'RSD', me: 'EUR', mk: 'MKD', by: 'BYN',
+    az: 'AZN', ge: 'GEL', md: 'MDL',
+    us: 'USD', ca: 'CAD', mx: 'MXN', ag: 'XCD', bz: 'BZD', cl: 'CLP', cr: 'CRC', dm: 'XCD',
+    do: 'DOP', ec: 'USD', gt: 'GTQ', ht: 'HTG', hn: 'HNL', jm: 'JMD', pa: 'PAB', py: 'PYG',
+    lc: 'XCD', vc: 'XCD', sr: 'SRD', bs: 'BSD', bo: 'BOB', co: 'COP', cu: 'CUP', ni: 'NIO',
+    kn: 'XCD', tt: 'TTD', pe: 'PEN', ar: 'ARS', br: 'BRL', bb: 'BBD', sv: 'USD', gd: 'XCD',
+    uy: 'UYU', gy: 'GYD', ve: 'VES',
+    fj: 'FJD', mh: 'USD', fm: 'USD', pw: 'USD', ws: 'WST', tv: 'AUD', nr: 'AUD', au: 'AUD',
+    nz: 'NZD', pg: 'PGK', ki: 'AUD', to: 'TOP', sb: 'SBD',
+    sz: 'SZL', gm: 'GMD', sc: 'SCR', ls: 'LSL', ml: 'XOF', mu: 'MUR', sn: 'XOF', za: 'ZAR',
+    eg: 'EGP', ke: 'KES', ma: 'MAD', mz: 'MZN', sd: 'SDG', tn: 'TND', dz: 'DZD', et: 'ETB',
+    rw: 'RWF', tz: 'TZS', ug: 'UGX', ng: 'NGN', mg: 'MGA', na: 'NAD', mw: 'MWK',
+  };
+
   const GENERAL_CHECKLIST = [
     { id: 'g_passport', label: '護照效期還有6個月以上' },
     { id: 'g_copies', label: '護照/簽證影本（紙本＋雲端備份）' },
@@ -1573,30 +1601,58 @@ import { animate, stagger } from 'motion';
       const legA = findCountry(points[i].id), legB = findCountry(points[i + 1].id);
       const leg = computeLeg(points[i].stopId, legA, points[i + 1].stopId, legB);
       if (leg) {
-        const label = document.createElementNS(svgNS, 'text');
-        label.setAttribute('class', 'route-leg-label');
-        label.setAttribute('x', (points[i].x + points[i + 1].x) / 2);
-        label.setAttribute('y', (points[i].y + points[i + 1].y) / 2 - 2);
-        label.textContent = TRANSPORT_ICONS[leg.mode] + ' ' + fmtKm(leg.km) + ' · ' + fmtHours(leg.hours);
-        routeLinesLayer.appendChild(label);
+        const lx = (points[i].x + points[i + 1].x) / 2, ly = (points[i].y + points[i + 1].y) / 2 - 2;
+        appendScaledMarker(routeLinesLayer, lx, ly, function (g) {
+          const label = document.createElementNS(svgNS, 'text');
+          label.setAttribute('class', 'route-leg-label');
+          label.setAttribute('x', lx);
+          label.setAttribute('y', ly);
+          label.textContent = TRANSPORT_ICONS[leg.mode] + ' ' + fmtKm(leg.km) + ' · ' + fmtHours(leg.hours);
+          g.appendChild(label);
+        });
       }
     }
     points.forEach(function (p) {
-      const dot = document.createElementNS(svgNS, 'circle');
-      dot.setAttribute('class', 'route-dot');
-      dot.setAttribute('cx', p.x);
-      dot.setAttribute('cy', p.y);
-      dot.setAttribute('r', 4.5);
-      routeLinesLayer.appendChild(dot);
-      const text = document.createElementNS(svgNS, 'text');
-      text.setAttribute('class', 'route-order');
-      text.setAttribute('x', p.x);
-      text.setAttribute('y', p.y);
-      text.textContent = p.order;
-      routeLinesLayer.appendChild(text);
+      appendScaledMarker(routeLinesLayer, p.x, p.y, function (g) {
+        const dot = document.createElementNS(svgNS, 'circle');
+        dot.setAttribute('class', 'route-dot');
+        dot.setAttribute('cx', p.x);
+        dot.setAttribute('cy', p.y);
+        dot.setAttribute('r', 4.5);
+        g.appendChild(dot);
+        const text = document.createElementNS(svgNS, 'text');
+        text.setAttribute('class', 'route-order');
+        text.setAttribute('x', p.x);
+        text.setAttribute('y', p.y);
+        text.textContent = p.order;
+        g.appendChild(text);
+      });
     });
 
     fitMapToPoints(points);
+  }
+
+  // Dots, order numbers, and leg-distance labels are drawn in the map's own SVG coordinate
+  // space, so without this they'd grow with every zoom step right along with the country
+  // shapes — fine at 1x, illegible/overlapping once someone zooms into a small route cluster
+  // (exactly the case the timeline map's zoom controls encourage). Each marker sits in its own
+  // <g> that carries a counter-scale of 1/zoomScale around its own anchor point, so it stays a
+  // constant screen size while its position still tracks the map underneath it.
+  function appendScaledMarker(parent, px, py, buildFn) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(svgNS, 'g');
+    g.setAttribute('class', 'route-marker-scale');
+    g.setAttribute('data-px', px);
+    g.setAttribute('data-py', py);
+    g.setAttribute('transform', markerScaleTransform(px, py));
+    buildFn(g);
+    parent.appendChild(g);
+    return g;
+  }
+
+  function markerScaleTransform(px, py) {
+    const s = 1 / zoomScale;
+    return 'translate(' + px + ',' + py + ') scale(' + s + ') translate(' + (-px) + ',' + (-py) + ')';
   }
 
   // ---------- zoom & pan ----------
@@ -1605,6 +1661,11 @@ import { animate, stagger } from 'motion';
 
   function applyMapTransform() {
     mapSvg.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomScale + ')';
+    if (routeLinesLayer) {
+      routeLinesLayer.querySelectorAll('.route-marker-scale').forEach(function (g) {
+        g.setAttribute('transform', markerScaleTransform(g.getAttribute('data-px'), g.getAttribute('data-py')));
+      });
+    }
   }
 
   // A route clustered in one region — most routes — used to render as a few invisible pixels
@@ -1884,6 +1945,19 @@ import { animate, stagger } from 'motion';
     toSel.innerHTML = codes.map(function (c) { return '<option value="' + c + '">' + c + '</option>'; }).join('');
     fromSel.value = codes.indexOf('USD') !== -1 ? 'USD' : codes[0];
     toSel.value = codes.indexOf('TWD') !== -1 ? 'TWD' : codes[0];
+  }
+
+  function populateConverterCountrySelects() {
+    const withCurrency = getAllCountries()
+      .filter(function (c) { return COUNTRY_CURRENCY[c.id]; })
+      .sort(function (a, b) { return a.name.localeCompare(b.name, 'zh-Hant'); });
+    const optionsHtml = '<option value="">－ 選擇國家 －</option>' + withCurrency.map(function (c) {
+      return '<option value="' + c.id + '">' + escapeHtml(c.name) + '（' + COUNTRY_CURRENCY[c.id] + '）</option>';
+    }).join('');
+    ['convFromCountry', 'convToCountry'].forEach(function (id) {
+      const sel = document.getElementById(id);
+      if (sel) sel.innerHTML = optionsHtml;
+    });
   }
 
   function currencyOptionsHtml(selected, codes) {
@@ -2379,6 +2453,23 @@ import { animate, stagger } from 'motion';
     const tmp = f.value; f.value = t.value; t.value = tmp;
     renderConverter();
   });
+  [['convFromCountry', 'convFrom'], ['convToCountry', 'convTo']].forEach(function (pair) {
+    const countrySel = document.getElementById(pair[0]);
+    const currencySel = document.getElementById(pair[1]);
+    countrySel.addEventListener('change', function () {
+      const countryId = this.value;
+      if (!countryId) return;
+      const code = COUNTRY_CURRENCY[countryId];
+      const hasRate = rates && Object.prototype.hasOwnProperty.call(rates, code);
+      document.getElementById('convRateLine').textContent = hasRate
+        ? ''
+        : '⚠ 目前查無 ' + code + ' 的即時匯率，無法自動代入';
+      if (hasRate) {
+        currencySel.value = code;
+        renderConverter();
+      }
+    });
+  });
   document.getElementById('availableFunds').addEventListener('input', function () {
     state.budget.availableFunds = this.value === '' ? null : Number(this.value);
     saveState();
@@ -2424,6 +2515,7 @@ import { animate, stagger } from 'motion';
   }
   initMap();
   initRates();
+  populateConverterCountrySelects();
   renderAll();
   switchTab(localStorage.getItem(TAB_STORAGE_KEY) || 'map');
   setInterval(updateRouteClocks, 60000);
