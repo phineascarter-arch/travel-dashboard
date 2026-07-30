@@ -156,13 +156,18 @@ import { animate, stagger } from 'motion';
 
   function addCity(countryId, name, nights) {
     if (!state.cities[countryId]) state.cities[countryId] = [];
-    state.cities[countryId].push({
+    const city = {
       id: 'city_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       name: name,
       nights: nights === '' || nights === null || nights === undefined ? null : Number(nights),
-    });
+      lat: null, lng: null, geocodeStatus: null,
+    };
+    state.cities[countryId].push(city);
     saveState();
     renderRoute();
+    const stop = state.route.filter(function (r) { return r.id === countryId; })[0];
+    const country = stop ? findCountry(stop.countryId) : null;
+    ensureCityGeocoded(countryId, city, country && country.id);
   }
 
   function removeCity(countryId, cityId) {
@@ -170,6 +175,60 @@ import { animate, stagger } from 'motion';
     state.cities[countryId] = state.cities[countryId].filter(function (c) { return c.id !== cityId; });
     saveState();
     renderRoute();
+  }
+
+  // ---------- city geocoding (OpenStreetMap Nominatim — free, no key, ~1 req/sec limit) ----------
+  // City names typed into "城市清單" are free text with no coordinates, so leg distances fall
+  // back to country-centroid math. This resolves each city to lat/lng in the background so
+  // computeLeg() can use the actual city (last one visited / first one arrived at) instead —
+  // meaningfully more accurate for large countries where a multi-week stay covers real ground.
+  const geocodeQueue = [];
+  let geocodeQueueBusy = false;
+  const geocodeAttempted = new Set();
+
+  function findCityEntry(stopId, cityId) {
+    const list = state.cities[stopId];
+    if (!list) return null;
+    return list.filter(function (c) { return c.id === cityId; })[0] || null;
+  }
+
+  function ensureCityGeocoded(stopId, city, countryCode) {
+    if (!city || city.geocodeStatus || geocodeAttempted.has(city.id)) return;
+    geocodeAttempted.add(city.id);
+    city.geocodeStatus = 'pending';
+    geocodeQueue.push({ stopId: stopId, cityId: city.id, name: city.name, countryCode: countryCode });
+    runGeocodeQueue();
+  }
+
+  function runGeocodeQueue() {
+    if (geocodeQueueBusy || !geocodeQueue.length) return;
+    geocodeQueueBusy = true;
+    const job = geocodeQueue.shift();
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1' +
+      (job.countryCode ? '&countrycodes=' + encodeURIComponent(job.countryCode) : '') +
+      '&q=' + encodeURIComponent(job.name);
+    fetch(url).then(function (res) {
+      if (!res.ok) throw new Error('geocode http ' + res.status);
+      return res.json();
+    }).then(function (results) {
+      const city = findCityEntry(job.stopId, job.cityId);
+      if (!city) return; // removed before the lookup came back
+      if (results && results.length) {
+        city.lat = parseFloat(results[0].lat);
+        city.lng = parseFloat(results[0].lon);
+        city.geocodeStatus = 'ok';
+      } else {
+        city.geocodeStatus = 'error';
+      }
+      saveState();
+      renderRoute();
+    }).catch(function () {
+      const city = findCityEntry(job.stopId, job.cityId);
+      if (city) { city.geocodeStatus = 'error'; saveState(); }
+    }).then(function () {
+      // Nominatim's usage policy caps this at ~1 request/second.
+      setTimeout(function () { geocodeQueueBusy = false; runGeocodeQueue(); }, 1100);
+    });
   }
 
   function parseDay(str) {
@@ -205,9 +264,26 @@ import { animate, stagger } from 'motion';
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
-  function legDistanceKm(a, b) {
-    if (!a || !b || typeof a.lat !== 'number' || typeof b.lat !== 'number') return null;
-    return haversineKm(a.lat, a.lng, b.lat, b.lng);
+  // Prefers the stop's own cities (geocoded via Nominatim, see ensureCityGeocoded) over the
+  // country's centroid: the last city visited when leaving a stop, the first one arrived at
+  // when entering the next — falls back to the centroid where a city has no coordinates yet
+  // (still pending/failed lookup) or no cities were entered at all.
+  function cityPoint(stopId, useLast) {
+    const cities = getCities(stopId);
+    if (!cities.length) return null;
+    const ordered = useLast ? cities.slice().reverse() : cities;
+    for (let i = 0; i < ordered.length; i++) {
+      const ct = ordered[i];
+      if (typeof ct.lat === 'number' && typeof ct.lng === 'number') return { lat: ct.lat, lng: ct.lng, cityName: ct.name };
+    }
+    return null;
+  }
+
+  function legRoutePoints(prevStopId, prevCountry, curStopId, curCountry) {
+    if (!prevCountry || !curCountry || typeof prevCountry.lat !== 'number' || typeof curCountry.lat !== 'number') return null;
+    const a = cityPoint(prevStopId, true) || { lat: prevCountry.lat, lng: prevCountry.lng, cityName: null };
+    const b = cityPoint(curStopId, false) || { lat: curCountry.lat, lng: curCountry.lng, cityName: null };
+    return { a: a, b: b, km: haversineKm(a.lat, a.lng, b.lat, b.lng), usedCity: !!(a.cityName || b.cityName) };
   }
 
   // Rough auto-suggestion only — no real border/ferry-route data behind this. Island
@@ -231,12 +307,15 @@ import { animate, stagger } from 'motion';
     renderAll();
   }
 
-  function legEstimate(a, b, mode) {
-    const km = legDistanceKm(a, b);
-    if (km === null) return null;
-    const useMode = mode || suggestTransportMode(a, b, km);
-    const spec = TRANSPORT_SPEEDS[useMode] || TRANSPORT_SPEEDS.flight;
-    return { km: km, hours: km / spec.kmh + spec.overheadH, mode: useMode };
+  function computeLeg(prevStopId, prevCountry, curStopId, curCountry) {
+    const pts = legRoutePoints(prevStopId, prevCountry, curStopId, curCountry);
+    if (!pts) return null;
+    const mode = getLegMode(curStopId, prevCountry, curCountry, pts.km);
+    const spec = TRANSPORT_SPEEDS[mode] || TRANSPORT_SPEEDS.flight;
+    return {
+      km: pts.km, hours: pts.km / spec.kmh + spec.overheadH, mode: mode,
+      usedCity: pts.usedCity, fromCity: pts.a.cityName, toCity: pts.b.cityName,
+    };
   }
 
   function fmtKm(km) {
@@ -244,8 +323,9 @@ import { animate, stagger } from 'motion';
   }
 
   function fmtHours(hours) {
-    const h = Math.floor(hours);
-    const m = Math.round((hours - h) * 60);
+    let h = Math.floor(hours);
+    let m = Math.round((hours - h) * 60);
+    if (m === 60) { h += 1; m = 0; }
     return (h > 0 ? h + 'h' : '') + (m > 0 ? m + 'm' : (h > 0 ? '' : '<1m'));
   }
 
@@ -440,8 +520,9 @@ import { animate, stagger } from 'motion';
     animate(grid.querySelectorAll('.country-card'), { opacity: [0, 1], y: [8, 0] }, { duration: 0.25, delay: stagger(0.03), ease: 'ease-out' });
   }
 
-  function renderCitySectionHtml(stopId, stopDurationDays) {
+  function renderCitySectionHtml(stopId, stopDurationDays, country) {
     const cities = getCities(stopId);
+    cities.forEach(function (c) { ensureCityGeocoded(stopId, c, country && country.id); });
     const totalNights = cities.reduce(function (sum, c) { return sum + (c.nights || 0); }, 0);
     const hasNights = cities.some(function (c) { return c.nights; });
     let mismatch = '';
@@ -449,7 +530,11 @@ import { animate, stagger } from 'motion';
       mismatch = ' <span class="city-mismatch">（站點排定' + stopDurationDays + '天，城市合計' + totalNights + '晚）</span>';
     }
     const chips = cities.map(function (c) {
-      return '<span class="city-chip">' + escapeHtml(c.name) +
+      const geoIcon = c.geocodeStatus === 'ok' ? '<span class="city-geo ok" title="已定位，會用於距離估算">📍</span>'
+        : c.geocodeStatus === 'pending' ? '<span class="city-geo pending" title="正在定位…">⋯</span>'
+        : c.geocodeStatus === 'error' ? '<span class="city-geo error" title="找不到座標，暫用國家中心點估算距離">⚠</span>'
+        : '';
+      return '<span class="city-chip">' + geoIcon + escapeHtml(c.name) +
         (c.nights ? ' <b>' + c.nights + '晚</b>' : '') +
         '<button type="button" class="city-remove" data-action="city-remove" data-stop="' + stopId + '" data-city="' + c.id + '">✕</button></span>';
     }).join('');
@@ -489,18 +574,20 @@ import { animate, stagger } from 'motion';
         }
         let legLine = '';
         if (idx > 0) {
-          const prev = findCountry(state.route[idx - 1].countryId);
-          const km = prev ? legDistanceKm(prev, c) : null;
-          if (km !== null) {
-            const mode = getLegMode(id, prev, c, km);
-            const leg = legEstimate(prev, c, mode);
+          const prevStop = state.route[idx - 1];
+          const prev = findCountry(prevStop.countryId);
+          const leg = computeLeg(prevStop.id, prev, id, c);
+          if (leg) {
             const isAuto = !state.legTransport[id];
-            legLine = '<div class="leg-line">' + TRANSPORT_ICONS[mode] + ' 距上一站 ' + fmtKm(leg.km) + ' · 預估' + TRANSPORT_LABELS[mode] + ' ' + fmtHours(leg.hours) +
+            const cityBadge = leg.usedCity
+              ? '<span class="leg-city-badge" title="依城市座標估算：' + escapeHtml(leg.fromCity || prev.name) + ' → ' + escapeHtml(leg.toCity || c.name) + '">🏙</span>'
+              : '';
+            legLine = '<div class="leg-line">' + TRANSPORT_ICONS[leg.mode] + ' 距上一站 ' + fmtKm(leg.km) + ' · 預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + cityBadge +
               '<select class="leg-mode-select" data-action="leg-mode" data-id="' + id + '">' +
                 '<option value="auto"' + (isAuto ? ' selected' : '') + '>自動建議</option>' +
-                '<option value="flight"' + (!isAuto && mode === 'flight' ? ' selected' : '') + '>✈ 飛機</option>' +
-                '<option value="land"' + (!isAuto && mode === 'land' ? ' selected' : '') + '>🚌 陸路</option>' +
-                '<option value="sea"' + (!isAuto && mode === 'sea' ? ' selected' : '') + '>⛴ 海路</option>' +
+                '<option value="flight"' + (!isAuto && leg.mode === 'flight' ? ' selected' : '') + '>✈ 飛機</option>' +
+                '<option value="land"' + (!isAuto && leg.mode === 'land' ? ' selected' : '') + '>🚌 陸路</option>' +
+                '<option value="sea"' + (!isAuto && leg.mode === 'sea' ? ' selected' : '') + '>⛴ 海路</option>' +
               '</select>' +
             '</div>';
           }
@@ -528,7 +615,7 @@ import { animate, stagger } from 'motion';
               '<input type="date" data-action="date-depart" data-id="' + id + '" value="' + (sched.depart || '') + '">' +
             '</div>' +
             warning +
-            renderCitySectionHtml(id, duration) +
+            renderCitySectionHtml(id, duration, c) +
           '</li>'
         );
       }).join('');
@@ -654,10 +741,8 @@ import { animate, stagger } from 'motion';
     let overlapCount = 0;
     let totalKm = 0, totalHours = 0, legCount = 0;
     const legOf = function (idx) {
-      const a = scheduled[idx - 1].country, b = scheduled[idx].country;
-      const km = legDistanceKm(a, b);
-      if (km === null) return null;
-      return legEstimate(a, b, getLegMode(scheduled[idx].id, a, b, km));
+      const prev = scheduled[idx - 1], cur = scheduled[idx];
+      return computeLeg(prev.id, prev.country, cur.id, cur.country);
     };
     scheduled.forEach(function (s, idx) {
       const left = Math.round((s.arriveDate - minDate) / DAY_MS) * pxPerDay;
@@ -676,8 +761,9 @@ import { animate, stagger } from 'motion';
           const prevLeft = Math.round((prev.arriveDate - minDate) / DAY_MS) * pxPerDay;
           const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
           const midX = (prevLeft + prevWidth + left) / 2;
+          const legBasis = leg.usedCity ? '（依城市座標：' + (leg.fromCity || prev.country.name) + ' → ' + (leg.toCity || s.country.name) + '）' : '（粗略估算，未計入轉機/等候時間）';
           rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' +
-            escapeHtml(prev.country.name + ' → ' + s.country.name + '：約 ' + fmtKm(leg.km) + '，預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + '（粗略估算，未計入轉機/等候時間）') + '">' + TRANSPORT_ICONS[leg.mode] + ' ' +
+            escapeHtml(prev.country.name + ' → ' + s.country.name + '：約 ' + fmtKm(leg.km) + '，預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + ' ' +
             fmtKm(leg.km) + ' · ' + fmtHours(leg.hours) + '</span></div>';
         }
       }
@@ -711,9 +797,9 @@ import { animate, stagger } from 'motion';
       const c = findCountry(stop.countryId);
       if (!c) return;
       if (idx > 0) {
-        const prevC = findCountry(state.route[idx - 1].countryId);
-        const legKm = prevC ? legDistanceKm(prevC, c) : null;
-        const leg = legKm !== null ? legEstimate(prevC, c, getLegMode(stop.id, prevC, c, legKm)) : null;
+        const prevStop = state.route[idx - 1];
+        const prevC = findCountry(prevStop.countryId);
+        const leg = computeLeg(prevStop.id, prevC, stop.id, c);
         if (leg) { km += leg.km; hours += leg.hours; }
       }
       if (c.fee !== null && c.fee !== undefined && c.fee > 0) {
@@ -788,9 +874,9 @@ import { animate, stagger } from 'motion';
 
       let legStat = '';
       if (idx > 0) {
-        const prevC = findCountry(state.route[idx - 1].countryId);
-        const legKm = prevC ? legDistanceKm(prevC, c) : null;
-        const leg = legKm !== null ? legEstimate(prevC, c, getLegMode(stop.id, prevC, c, legKm)) : null;
+        const prevStop = state.route[idx - 1];
+        const prevC = findCountry(prevStop.countryId);
+        const leg = computeLeg(prevStop.id, prevC, stop.id, c);
         if (leg) legStat = '<div class="activity-stat"><span class="label">距上一站</span><span class="value">' + fmtKm(leg.km) + '</span></div>' +
           '<div class="activity-stat"><span class="label">' + TRANSPORT_ICONS[leg.mode] + ' 預估' + TRANSPORT_LABELS[leg.mode] + '</span><span class="value">' + fmtHours(leg.hours) + '</span></div>';
       }
@@ -1404,6 +1490,7 @@ import { animate, stagger } from 'motion';
     });
 
     setupMapZoomPan();
+    setupTimelineMapZoomPan();
     renderLegend();
   }
 
@@ -1484,8 +1571,7 @@ import { animate, stagger } from 'motion';
       routeLinesLayer.appendChild(line);
 
       const legA = findCountry(points[i].id), legB = findCountry(points[i + 1].id);
-      const legKm = legDistanceKm(legA, legB);
-      const leg = legKm !== null ? legEstimate(legA, legB, getLegMode(points[i + 1].stopId, legA, legB, legKm)) : null;
+      const leg = computeLeg(points[i].stopId, legA, points[i + 1].stopId, legB);
       if (leg) {
         const label = document.createElementNS(svgNS, 'text');
         label.setAttribute('class', 'route-leg-label');
@@ -1521,13 +1607,23 @@ import { animate, stagger } from 'motion';
     mapSvg.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomScale + ')';
   }
 
-  // The timeline tab's map preview has no zoom/pan controls of its own (it's a read-only
-  // snapshot, not the interactive #mapViewport), so a route clustered in one region — most
-  // routes — used to render as a few pixels on a whole-world view. Auto-frame it instead.
+  // A route clustered in one region — most routes — used to render as a few invisible pixels
+  // on the timeline map's whole-world default view, so auto-frame it to the route's bounding
+  // box instead. Once the user manually zooms/pans that preview (see setupTimelineMapZoomPan),
+  // further auto-fits are skipped until the route's set of stops actually changes, so editing
+  // an unrelated field (a date, a city) doesn't yank their view back.
+  let timelineMapUserAdjusted = false;
+  let lastFitRouteKey = null;
+
   function fitMapToPoints(points) {
     const host = document.getElementById('timelineMapContainer');
     const viewport = document.getElementById('timelineMapViewport');
     if (!mapSvg || !host || !viewport || !host.contains(mapSvg)) return;
+
+    const key = points.map(function (p) { return p.stopId; }).join(',');
+    if (timelineMapUserAdjusted && key === lastFitRouteKey) return;
+    lastFitRouteKey = key;
+    timelineMapUserAdjusted = false;
 
     if (!points.length) { zoomScale = 1; panX = 0; panY = 0; applyMapTransform(); return; }
 
@@ -1636,6 +1732,78 @@ import { animate, stagger } from 'motion';
     });
   }
 
+  // The timeline map preview is read-only w.r.t. country selection (no click-to-select — this
+  // tab isn't about picking countries), just zoom/pan, plus a reset that snaps back to
+  // fitMapToPoints's auto-frame instead of a flat 1x/0,0.
+  function setupTimelineMapZoomPan() {
+    const viewport = document.getElementById('timelineMapViewport');
+    if (!viewport) return;
+
+    function zoomBy(factor, cx, cy) {
+      const newScale = Math.min(6, Math.max(1, zoomScale * factor));
+      panX = cx - (cx - panX) * (newScale / zoomScale);
+      panY = cy - (cy - panY) * (newScale / zoomScale);
+      zoomScale = newScale;
+      timelineMapUserAdjusted = true;
+      applyMapTransform();
+    }
+
+    viewport.addEventListener('wheel', function (e) {
+      e.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      zoomBy(e.deltaY > 0 ? 0.88 : 1.14, e.clientX - rect.left, e.clientY - rect.top);
+    }, { passive: false });
+
+    document.getElementById('timelineMapZoomIn').addEventListener('click', function () {
+      const rect = viewport.getBoundingClientRect();
+      zoomBy(1.3, rect.width / 2, rect.height / 2);
+    });
+    document.getElementById('timelineMapZoomOut').addEventListener('click', function () {
+      const rect = viewport.getBoundingClientRect();
+      zoomBy(1 / 1.3, rect.width / 2, rect.height / 2);
+    });
+    document.getElementById('timelineMapZoomReset').addEventListener('click', function () {
+      timelineMapUserAdjusted = false;
+      renderRouteLines();
+    });
+
+    let dragging = false, dragMoved = false, dragStartX = 0, dragStartY = 0, dragStartPanX = 0, dragStartPanY = 0;
+    viewport.addEventListener('pointerdown', function (e) {
+      dragging = true;
+      dragMoved = false;
+      dragStartX = e.clientX - panX;
+      dragStartY = e.clientY - panY;
+      dragStartPanX = panX;
+      dragStartPanY = panY;
+      viewport.setPointerCapture(e.pointerId);
+      viewport.classList.add('grabbing');
+    });
+    viewport.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      const nx = e.clientX - dragStartX, ny = e.clientY - dragStartY;
+      if (!dragMoved && (Math.abs(nx - dragStartPanX) > 8 || Math.abs(ny - dragStartPanY) > 8)) dragMoved = true;
+      if (dragMoved) {
+        panX = nx; panY = ny;
+        timelineMapUserAdjusted = true;
+        applyMapTransform();
+      }
+    });
+    function endDrag(e) {
+      dragging = false;
+      viewport.classList.remove('grabbing');
+      if (e && e.pointerId != null && viewport.hasPointerCapture(e.pointerId)) {
+        viewport.releasePointerCapture(e.pointerId);
+      }
+    }
+    viewport.addEventListener('pointerup', endDrag);
+    viewport.addEventListener('pointercancel', endDrag);
+
+    viewport.addEventListener('dblclick', function () {
+      timelineMapUserAdjusted = false;
+      renderRouteLines();
+    });
+  }
+
   // =========================================================
   // ---------- tabs ----------
   // =========================================================
@@ -1668,6 +1836,7 @@ import { animate, stagger } from 'motion';
     if (mapSvg.parentElement !== targetHost) targetHost.appendChild(mapSvg);
     mapSvg.classList.toggle('in-timeline-context', tab === 'timeline');
     if (routeLinesLayer) routeLinesLayer.classList.toggle('in-timeline-context', tab === 'timeline');
+    timelineMapUserAdjusted = false;
     zoomScale = 1; panX = 0; panY = 0;
     applyMapTransform();
   }
@@ -2008,9 +2177,9 @@ import { animate, stagger } from 'motion';
       const sb = state.budget.perStop[stop.id] || null;
       let leg = null;
       if (idx > 0) {
-        const prevC = findCountry(state.route[idx - 1].countryId);
-        const km = prevC ? legDistanceKm(prevC, c) : null;
-        if (km !== null) leg = legEstimate(prevC, c, getLegMode(stop.id, prevC, c, km));
+        const prevStop = state.route[idx - 1];
+        const prevC = findCountry(prevStop.countryId);
+        leg = computeLeg(prevStop.id, prevC, stop.id, c);
       }
       const visitCount = state.route.filter(function (r, i) { return i <= idx && r.countryId === stop.countryId; }).length;
       return { stop: stop, country: c, sched: sched, duration: duration, cities: cities, budget: sb, leg: leg, visitCount: visitCount, order: idx + 1 };

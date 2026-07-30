@@ -4975,13 +4975,22 @@
     }
     function addCity(countryId, name, nights) {
       if (!state.cities[countryId]) state.cities[countryId] = [];
-      state.cities[countryId].push({
+      const city = {
         id: "city_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         name,
-        nights: nights === "" || nights === null || nights === void 0 ? null : Number(nights)
-      });
+        nights: nights === "" || nights === null || nights === void 0 ? null : Number(nights),
+        lat: null,
+        lng: null,
+        geocodeStatus: null
+      };
+      state.cities[countryId].push(city);
       saveState();
       renderRoute();
+      const stop = state.route.filter(function(r) {
+        return r.id === countryId;
+      })[0];
+      const country = stop ? findCountry(stop.countryId) : null;
+      ensureCityGeocoded(countryId, city, country && country.id);
     }
     function removeCity(countryId, cityId) {
       if (!state.cities[countryId]) return;
@@ -4990,6 +4999,56 @@
       });
       saveState();
       renderRoute();
+    }
+    const geocodeQueue = [];
+    let geocodeQueueBusy = false;
+    const geocodeAttempted = /* @__PURE__ */ new Set();
+    function findCityEntry(stopId, cityId) {
+      const list = state.cities[stopId];
+      if (!list) return null;
+      return list.filter(function(c) {
+        return c.id === cityId;
+      })[0] || null;
+    }
+    function ensureCityGeocoded(stopId, city, countryCode) {
+      if (!city || city.geocodeStatus || geocodeAttempted.has(city.id)) return;
+      geocodeAttempted.add(city.id);
+      city.geocodeStatus = "pending";
+      geocodeQueue.push({ stopId, cityId: city.id, name: city.name, countryCode });
+      runGeocodeQueue();
+    }
+    function runGeocodeQueue() {
+      if (geocodeQueueBusy || !geocodeQueue.length) return;
+      geocodeQueueBusy = true;
+      const job = geocodeQueue.shift();
+      const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1" + (job.countryCode ? "&countrycodes=" + encodeURIComponent(job.countryCode) : "") + "&q=" + encodeURIComponent(job.name);
+      fetch(url).then(function(res) {
+        if (!res.ok) throw new Error("geocode http " + res.status);
+        return res.json();
+      }).then(function(results) {
+        const city = findCityEntry(job.stopId, job.cityId);
+        if (!city) return;
+        if (results && results.length) {
+          city.lat = parseFloat(results[0].lat);
+          city.lng = parseFloat(results[0].lon);
+          city.geocodeStatus = "ok";
+        } else {
+          city.geocodeStatus = "error";
+        }
+        saveState();
+        renderRoute();
+      }).catch(function() {
+        const city = findCityEntry(job.stopId, job.cityId);
+        if (city) {
+          city.geocodeStatus = "error";
+          saveState();
+        }
+      }).then(function() {
+        setTimeout(function() {
+          geocodeQueueBusy = false;
+          runGeocodeQueue();
+        }, 1100);
+      });
     }
     function parseDay(str) {
       if (!str) return null;
@@ -5023,9 +5082,21 @@
       const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
-    function legDistanceKm(a, b) {
-      if (!a || !b || typeof a.lat !== "number" || typeof b.lat !== "number") return null;
-      return haversineKm(a.lat, a.lng, b.lat, b.lng);
+    function cityPoint(stopId, useLast) {
+      const cities = getCities(stopId);
+      if (!cities.length) return null;
+      const ordered = useLast ? cities.slice().reverse() : cities;
+      for (let i = 0; i < ordered.length; i++) {
+        const ct = ordered[i];
+        if (typeof ct.lat === "number" && typeof ct.lng === "number") return { lat: ct.lat, lng: ct.lng, cityName: ct.name };
+      }
+      return null;
+    }
+    function legRoutePoints(prevStopId, prevCountry, curStopId, curCountry) {
+      if (!prevCountry || !curCountry || typeof prevCountry.lat !== "number" || typeof curCountry.lat !== "number") return null;
+      const a = cityPoint(prevStopId, true) || { lat: prevCountry.lat, lng: prevCountry.lng, cityName: null };
+      const b = cityPoint(curStopId, false) || { lat: curCountry.lat, lng: curCountry.lng, cityName: null };
+      return { a, b, km: haversineKm(a.lat, a.lng, b.lat, b.lng), usedCity: !!(a.cityName || b.cityName) };
     }
     function suggestTransportMode(a, b, km) {
       if (!a || !b) return "flight";
@@ -5042,19 +5113,30 @@
       saveState();
       renderAll();
     }
-    function legEstimate(a, b, mode) {
-      const km = legDistanceKm(a, b);
-      if (km === null) return null;
-      const useMode = mode || suggestTransportMode(a, b, km);
-      const spec = TRANSPORT_SPEEDS[useMode] || TRANSPORT_SPEEDS.flight;
-      return { km, hours: km / spec.kmh + spec.overheadH, mode: useMode };
+    function computeLeg(prevStopId, prevCountry, curStopId, curCountry) {
+      const pts = legRoutePoints(prevStopId, prevCountry, curStopId, curCountry);
+      if (!pts) return null;
+      const mode = getLegMode(curStopId, prevCountry, curCountry, pts.km);
+      const spec = TRANSPORT_SPEEDS[mode] || TRANSPORT_SPEEDS.flight;
+      return {
+        km: pts.km,
+        hours: pts.km / spec.kmh + spec.overheadH,
+        mode,
+        usedCity: pts.usedCity,
+        fromCity: pts.a.cityName,
+        toCity: pts.b.cityName
+      };
     }
     function fmtKm(km) {
       return Math.round(km).toLocaleString("zh-Hant") + " km";
     }
     function fmtHours(hours) {
-      const h = Math.floor(hours);
-      const m = Math.round((hours - h) * 60);
+      let h = Math.floor(hours);
+      let m = Math.round((hours - h) * 60);
+      if (m === 60) {
+        h += 1;
+        m = 0;
+      }
       return (h > 0 ? h + "h" : "") + (m > 0 ? m + "m" : h > 0 ? "" : "<1m");
     }
     function fmtDate(date) {
@@ -5213,8 +5295,11 @@
       }).join("");
       animate(grid.querySelectorAll(".country-card"), { opacity: [0, 1], y: [8, 0] }, { duration: 0.25, delay: stagger(0.03), ease: "ease-out" });
     }
-    function renderCitySectionHtml(stopId, stopDurationDays) {
+    function renderCitySectionHtml(stopId, stopDurationDays, country) {
       const cities = getCities(stopId);
+      cities.forEach(function(c) {
+        ensureCityGeocoded(stopId, c, country && country.id);
+      });
       const totalNights = cities.reduce(function(sum, c) {
         return sum + (c.nights || 0);
       }, 0);
@@ -5226,7 +5311,8 @@
         mismatch = ' <span class="city-mismatch">\uFF08\u7AD9\u9EDE\u6392\u5B9A' + stopDurationDays + "\u5929\uFF0C\u57CE\u5E02\u5408\u8A08" + totalNights + "\u665A\uFF09</span>";
       }
       const chips = cities.map(function(c) {
-        return '<span class="city-chip">' + escapeHtml(c.name) + (c.nights ? " <b>" + c.nights + "\u665A</b>" : "") + '<button type="button" class="city-remove" data-action="city-remove" data-stop="' + stopId + '" data-city="' + c.id + '">\u2715</button></span>';
+        const geoIcon = c.geocodeStatus === "ok" ? '<span class="city-geo ok" title="\u5DF2\u5B9A\u4F4D\uFF0C\u6703\u7528\u65BC\u8DDD\u96E2\u4F30\u7B97">\u{1F4CD}</span>' : c.geocodeStatus === "pending" ? '<span class="city-geo pending" title="\u6B63\u5728\u5B9A\u4F4D\u2026">\u22EF</span>' : c.geocodeStatus === "error" ? '<span class="city-geo error" title="\u627E\u4E0D\u5230\u5EA7\u6A19\uFF0C\u66AB\u7528\u570B\u5BB6\u4E2D\u5FC3\u9EDE\u4F30\u7B97\u8DDD\u96E2">\u26A0</span>' : "";
+        return '<span class="city-chip">' + geoIcon + escapeHtml(c.name) + (c.nights ? " <b>" + c.nights + "\u665A</b>" : "") + '<button type="button" class="city-remove" data-action="city-remove" data-stop="' + stopId + '" data-city="' + c.id + '">\u2715</button></span>';
       }).join("");
       return '<div class="city-section"><div class="city-header">\u{1F3D9} \u57CE\u5E02\u6E05\u55AE' + (cities.length ? "\uFF08" + cities.length + "\uFF09" + mismatch : "") + "</div>" + (chips ? '<div class="city-chips">' + chips + "</div>" : "") + '<div class="city-add-row"><input type="text" class="city-name-input" data-field="cityName" data-stop="' + stopId + '" placeholder="\u57CE\u5E02\u540D\u7A31"><input type="number" class="city-nights-input" data-field="cityNights" data-stop="' + stopId + '" min="0" placeholder="\u665A\u6578"><button type="button" class="btn btn-small btn-ghost" data-action="city-add" data-stop="' + stopId + '">+ \u65B0\u589E</button></div></div>';
     }
@@ -5250,13 +5336,13 @@
           }
           let legLine = "";
           if (idx > 0) {
-            const prev = findCountry(state.route[idx - 1].countryId);
-            const km = prev ? legDistanceKm(prev, c) : null;
-            if (km !== null) {
-              const mode = getLegMode(id, prev, c, km);
-              const leg = legEstimate(prev, c, mode);
+            const prevStop = state.route[idx - 1];
+            const prev = findCountry(prevStop.countryId);
+            const leg = computeLeg(prevStop.id, prev, id, c);
+            if (leg) {
               const isAuto = !state.legTransport[id];
-              legLine = '<div class="leg-line">' + TRANSPORT_ICONS[mode] + " \u8DDD\u4E0A\u4E00\u7AD9 " + fmtKm(leg.km) + " \xB7 \u9810\u4F30" + TRANSPORT_LABELS[mode] + " " + fmtHours(leg.hours) + '<select class="leg-mode-select" data-action="leg-mode" data-id="' + id + '"><option value="auto"' + (isAuto ? " selected" : "") + '>\u81EA\u52D5\u5EFA\u8B70</option><option value="flight"' + (!isAuto && mode === "flight" ? " selected" : "") + '>\u2708 \u98DB\u6A5F</option><option value="land"' + (!isAuto && mode === "land" ? " selected" : "") + '>\u{1F68C} \u9678\u8DEF</option><option value="sea"' + (!isAuto && mode === "sea" ? " selected" : "") + ">\u26F4 \u6D77\u8DEF</option></select></div>";
+              const cityBadge = leg.usedCity ? '<span class="leg-city-badge" title="\u4F9D\u57CE\u5E02\u5EA7\u6A19\u4F30\u7B97\uFF1A' + escapeHtml(leg.fromCity || prev.name) + " \u2192 " + escapeHtml(leg.toCity || c.name) + '">\u{1F3D9}</span>' : "";
+              legLine = '<div class="leg-line">' + TRANSPORT_ICONS[leg.mode] + " \u8DDD\u4E0A\u4E00\u7AD9 " + fmtKm(leg.km) + " \xB7 \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + cityBadge + '<select class="leg-mode-select" data-action="leg-mode" data-id="' + id + '"><option value="auto"' + (isAuto ? " selected" : "") + '>\u81EA\u52D5\u5EFA\u8B70</option><option value="flight"' + (!isAuto && leg.mode === "flight" ? " selected" : "") + '>\u2708 \u98DB\u6A5F</option><option value="land"' + (!isAuto && leg.mode === "land" ? " selected" : "") + '>\u{1F68C} \u9678\u8DEF</option><option value="sea"' + (!isAuto && leg.mode === "sea" ? " selected" : "") + ">\u26F4 \u6D77\u8DEF</option></select></div>";
             }
           }
           const visitLabel = state.route.filter(function(r, i) {
@@ -5266,7 +5352,7 @@
           }).length + "\u6B21\uFF09" : "";
           const timeInfo = getLocalTimeInfo(c.tz);
           const timeLine = timeInfo ? '<div class="local-time" data-tz="' + escapeHtml(c.tz) + '">\u{1F550} ' + timeInfo.timeStr + (timeInfo.diffLabel ? "\uFF08" + timeInfo.diffLabel + "\uFF09" : "") + "</div>" : "";
-          return '<li class="route-item" data-id="' + id + '"><span class="order">' + (idx + 1) + '</span><div class="info"><div class="name">' + flagImg(c.id) + escapeHtml(c.name) + visitLabel + '</div><div class="fee">' + VISA_LABELS[c.visaType] + (fee ? " \xB7 " + escapeHtml(fee) : "") + (duration !== null ? " \xB7 " + duration + "\u5929" : "") + "</div>" + timeLine + legLine + '</div><div class="move-btns"><button data-action="move-up" data-id="' + id + '" ' + (idx === 0 ? "disabled" : "") + '>\u25B2</button><button data-action="move-down" data-id="' + id + '" ' + (idx === state.route.length - 1 ? "disabled" : "") + '>\u25BC</button></div><button class="btn btn-small btn-ghost" data-action="remove-route" data-id="' + id + '">\u79FB\u9664</button><div class="date-row"><input type="date" data-action="date-arrive" data-id="' + id + '" value="' + (sched.arrive || "") + '"><span class="date-sep">\u2192</span><input type="date" data-action="date-depart" data-id="' + id + '" value="' + (sched.depart || "") + '"></div>' + warning2 + renderCitySectionHtml(id, duration) + "</li>";
+          return '<li class="route-item" data-id="' + id + '"><span class="order">' + (idx + 1) + '</span><div class="info"><div class="name">' + flagImg(c.id) + escapeHtml(c.name) + visitLabel + '</div><div class="fee">' + VISA_LABELS[c.visaType] + (fee ? " \xB7 " + escapeHtml(fee) : "") + (duration !== null ? " \xB7 " + duration + "\u5929" : "") + "</div>" + timeLine + legLine + '</div><div class="move-btns"><button data-action="move-up" data-id="' + id + '" ' + (idx === 0 ? "disabled" : "") + '>\u25B2</button><button data-action="move-down" data-id="' + id + '" ' + (idx === state.route.length - 1 ? "disabled" : "") + '>\u25BC</button></div><button class="btn btn-small btn-ghost" data-action="remove-route" data-id="' + id + '">\u79FB\u9664</button><div class="date-row"><input type="date" data-action="date-arrive" data-id="' + id + '" value="' + (sched.arrive || "") + '"><span class="date-sep">\u2192</span><input type="date" data-action="date-depart" data-id="' + id + '" value="' + (sched.depart || "") + '"></div>' + warning2 + renderCitySectionHtml(id, duration, c) + "</li>";
         }).join("");
         const totals = {};
         let unknownCount = 0;
@@ -5385,10 +5471,8 @@
       let overlapCount = 0;
       let totalKm = 0, totalHours = 0, legCount = 0;
       const legOf = function(idx) {
-        const a = scheduled[idx - 1].country, b = scheduled[idx].country;
-        const km = legDistanceKm(a, b);
-        if (km === null) return null;
-        return legEstimate(a, b, getLegMode(scheduled[idx].id, a, b, km));
+        const prev = scheduled[idx - 1], cur = scheduled[idx];
+        return computeLeg(prev.id, prev.country, cur.id, cur.country);
       };
       scheduled.forEach(function(s, idx) {
         const left = Math.round((s.arriveDate - minDate) / DAY_MS) * pxPerDay;
@@ -5408,7 +5492,8 @@
             const prevLeft = Math.round((prev.arriveDate - minDate) / DAY_MS) * pxPerDay;
             const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
             const midX = (prevLeft + prevWidth + left) / 2;
-            rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' + escapeHtml(prev.country.name + " \u2192 " + s.country.name + "\uFF1A\u7D04 " + fmtKm(leg.km) + "\uFF0C\u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + "\uFF08\u7C97\u7565\u4F30\u7B97\uFF0C\u672A\u8A08\u5165\u8F49\u6A5F/\u7B49\u5019\u6642\u9593\uFF09") + '">' + TRANSPORT_ICONS[leg.mode] + " " + fmtKm(leg.km) + " \xB7 " + fmtHours(leg.hours) + "</span></div>";
+            const legBasis = leg.usedCity ? "\uFF08\u4F9D\u57CE\u5E02\u5EA7\u6A19\uFF1A" + (leg.fromCity || prev.country.name) + " \u2192 " + (leg.toCity || s.country.name) + "\uFF09" : "\uFF08\u7C97\u7565\u4F30\u7B97\uFF0C\u672A\u8A08\u5165\u8F49\u6A5F/\u7B49\u5019\u6642\u9593\uFF09";
+            rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' + escapeHtml(prev.country.name + " \u2192 " + s.country.name + "\uFF1A\u7D04 " + fmtKm(leg.km) + "\uFF0C\u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + " " + fmtKm(leg.km) + " \xB7 " + fmtHours(leg.hours) + "</span></div>";
           }
         }
         const cls = ["timeline-bar", VISA_CLASS[s.country.visaType]];
@@ -5429,9 +5514,9 @@
         const c = findCountry(stop.countryId);
         if (!c) return;
         if (idx > 0) {
-          const prevC = findCountry(state.route[idx - 1].countryId);
-          const legKm = prevC ? legDistanceKm(prevC, c) : null;
-          const leg = legKm !== null ? legEstimate(prevC, c, getLegMode(stop.id, prevC, c, legKm)) : null;
+          const prevStop = state.route[idx - 1];
+          const prevC = findCountry(prevStop.countryId);
+          const leg = computeLeg(prevStop.id, prevC, stop.id, c);
           if (leg) {
             km += leg.km;
             hours += leg.hours;
@@ -5498,9 +5583,9 @@
         const dateText = sched.arrive && sched.depart ? sched.arrive + " \u2192 " + sched.depart : "\u5C1A\u672A\u6392\u5B9A\u65E5\u671F";
         let legStat = "";
         if (idx > 0) {
-          const prevC = findCountry(state.route[idx - 1].countryId);
-          const legKm = prevC ? legDistanceKm(prevC, c) : null;
-          const leg = legKm !== null ? legEstimate(prevC, c, getLegMode(stop.id, prevC, c, legKm)) : null;
+          const prevStop = state.route[idx - 1];
+          const prevC = findCountry(prevStop.countryId);
+          const leg = computeLeg(prevStop.id, prevC, stop.id, c);
           if (leg) legStat = '<div class="activity-stat"><span class="label">\u8DDD\u4E0A\u4E00\u7AD9</span><span class="value">' + fmtKm(leg.km) + '</span></div><div class="activity-stat"><span class="label">' + TRANSPORT_ICONS[leg.mode] + " \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + '</span><span class="value">' + fmtHours(leg.hours) + "</span></div>";
         }
         const feeStr = formatFee(c);
@@ -6023,6 +6108,7 @@
         tooltip.hidden = true;
       });
       setupMapZoomPan();
+      setupTimelineMapZoomPan();
       renderLegend();
     }
     function renderMap() {
@@ -6092,8 +6178,7 @@
         line.setAttribute("y2", points[i + 1].y);
         routeLinesLayer.appendChild(line);
         const legA = findCountry(points[i].id), legB = findCountry(points[i + 1].id);
-        const legKm = legDistanceKm(legA, legB);
-        const leg = legKm !== null ? legEstimate(legA, legB, getLegMode(points[i + 1].stopId, legA, legB, legKm)) : null;
+        const leg = computeLeg(points[i].stopId, legA, points[i + 1].stopId, legB);
         if (leg) {
           const label = document.createElementNS(svgNS, "text");
           label.setAttribute("class", "route-leg-label");
@@ -6124,10 +6209,18 @@
     function applyMapTransform() {
       mapSvg.style.transform = "translate(" + panX + "px," + panY + "px) scale(" + zoomScale + ")";
     }
+    let timelineMapUserAdjusted = false;
+    let lastFitRouteKey = null;
     function fitMapToPoints(points) {
       const host = document.getElementById("timelineMapContainer");
       const viewport = document.getElementById("timelineMapViewport");
       if (!mapSvg || !host || !viewport || !host.contains(mapSvg)) return;
+      const key = points.map(function(p) {
+        return p.stopId;
+      }).join(",");
+      if (timelineMapUserAdjusted && key === lastFitRouteKey) return;
+      lastFitRouteKey = key;
+      timelineMapUserAdjusted = false;
       if (!points.length) {
         zoomScale = 1;
         panX = 0;
@@ -6232,6 +6325,70 @@
         applyMapTransform();
       });
     }
+    function setupTimelineMapZoomPan() {
+      const viewport = document.getElementById("timelineMapViewport");
+      if (!viewport) return;
+      function zoomBy(factor, cx, cy) {
+        const newScale = Math.min(6, Math.max(1, zoomScale * factor));
+        panX = cx - (cx - panX) * (newScale / zoomScale);
+        panY = cy - (cy - panY) * (newScale / zoomScale);
+        zoomScale = newScale;
+        timelineMapUserAdjusted = true;
+        applyMapTransform();
+      }
+      viewport.addEventListener("wheel", function(e) {
+        e.preventDefault();
+        const rect = viewport.getBoundingClientRect();
+        zoomBy(e.deltaY > 0 ? 0.88 : 1.14, e.clientX - rect.left, e.clientY - rect.top);
+      }, { passive: false });
+      document.getElementById("timelineMapZoomIn").addEventListener("click", function() {
+        const rect = viewport.getBoundingClientRect();
+        zoomBy(1.3, rect.width / 2, rect.height / 2);
+      });
+      document.getElementById("timelineMapZoomOut").addEventListener("click", function() {
+        const rect = viewport.getBoundingClientRect();
+        zoomBy(1 / 1.3, rect.width / 2, rect.height / 2);
+      });
+      document.getElementById("timelineMapZoomReset").addEventListener("click", function() {
+        timelineMapUserAdjusted = false;
+        renderRouteLines();
+      });
+      let dragging = false, dragMoved = false, dragStartX2 = 0, dragStartY2 = 0, dragStartPanX2 = 0, dragStartPanY2 = 0;
+      viewport.addEventListener("pointerdown", function(e) {
+        dragging = true;
+        dragMoved = false;
+        dragStartX2 = e.clientX - panX;
+        dragStartY2 = e.clientY - panY;
+        dragStartPanX2 = panX;
+        dragStartPanY2 = panY;
+        viewport.setPointerCapture(e.pointerId);
+        viewport.classList.add("grabbing");
+      });
+      viewport.addEventListener("pointermove", function(e) {
+        if (!dragging) return;
+        const nx = e.clientX - dragStartX2, ny = e.clientY - dragStartY2;
+        if (!dragMoved && (Math.abs(nx - dragStartPanX2) > 8 || Math.abs(ny - dragStartPanY2) > 8)) dragMoved = true;
+        if (dragMoved) {
+          panX = nx;
+          panY = ny;
+          timelineMapUserAdjusted = true;
+          applyMapTransform();
+        }
+      });
+      function endDrag(e) {
+        dragging = false;
+        viewport.classList.remove("grabbing");
+        if (e && e.pointerId != null && viewport.hasPointerCapture(e.pointerId)) {
+          viewport.releasePointerCapture(e.pointerId);
+        }
+      }
+      viewport.addEventListener("pointerup", endDrag);
+      viewport.addEventListener("pointercancel", endDrag);
+      viewport.addEventListener("dblclick", function() {
+        timelineMapUserAdjusted = false;
+        renderRouteLines();
+      });
+    }
     const TAB_STORAGE_KEY = "rtwActiveTab_v1";
     function switchTab(tab) {
       document.querySelectorAll(".tab-btn").forEach(function(btn) {
@@ -6253,6 +6410,7 @@
       if (mapSvg.parentElement !== targetHost) targetHost.appendChild(mapSvg);
       mapSvg.classList.toggle("in-timeline-context", tab === "timeline");
       if (routeLinesLayer) routeLinesLayer.classList.toggle("in-timeline-context", tab === "timeline");
+      timelineMapUserAdjusted = false;
       zoomScale = 1;
       panX = 0;
       panY = 0;
@@ -6545,9 +6703,9 @@
         const sb = state.budget.perStop[stop.id] || null;
         let leg = null;
         if (idx > 0) {
-          const prevC = findCountry(state.route[idx - 1].countryId);
-          const km = prevC ? legDistanceKm(prevC, c) : null;
-          if (km !== null) leg = legEstimate(prevC, c, getLegMode(stop.id, prevC, c, km));
+          const prevStop = state.route[idx - 1];
+          const prevC = findCountry(prevStop.countryId);
+          leg = computeLeg(prevStop.id, prevC, stop.id, c);
         }
         const visitCount = state.route.filter(function(r, i) {
           return i <= idx && r.countryId === stop.countryId;
