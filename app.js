@@ -386,7 +386,8 @@
       const personal = state.personalNotes[c.id] ? '<div class="card-personal-note">📝 ' + escapeHtml(state.personalNotes[c.id]) + '</div>' : '';
       const stayLine = c.stayDays ? ('可停留 ' + c.stayDays + ' 天') : '';
       const feeLine = formatFee(c);
-      const metaBits = [REGION_LABELS[c.region] || c.region, stayLine, feeLine].filter(Boolean);
+      const powerLine = c.powerVoltage ? ('🔌 ' + c.powerVoltage + (c.powerPlug ? '・Type ' + c.powerPlug : '')) : '';
+      const metaBits = [REGION_LABELS[c.region] || c.region, stayLine, feeLine, powerLine].filter(Boolean);
       const highlighted = c.id === selectedId ? ' highlighted' : '';
       const safetyBadge = c.safetyLevel ? '<span class="badge safety-badge-' + c.safetyLevel + '">🛡 ' + SAFETY_LABELS[c.safetyLevel] + '</span>' : '';
       const safetyNoteLine = c.safetyNote ? '<div class="card-safety-note">🛡 ' + escapeHtml(c.safetyNote) + '</div>' : '';
