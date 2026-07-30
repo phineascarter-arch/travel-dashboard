@@ -123,13 +123,14 @@
     return getAllCountries().find(function (c) { return c.id === id; });
   }
 
-  // Every country id in this dataset is its ISO 3166-1 alpha-2 code (lowercase), which is
-  // exactly what's needed to build the matching flag emoji from the two Unicode regional
-  // indicator symbols — no separate flag data/images to maintain.
-  function flagEmoji(id) {
+  // Every country id in this dataset is its ISO 3166-1 alpha-2 code (lowercase), which is also
+  // exactly what flagcdn.com expects as a path segment. Using real flag images instead of the
+  // Unicode regional-indicator emoji because Windows' emoji font deliberately omits flag glyphs
+  // (falls back to showing the two letters as plain text) — this renders consistently everywhere.
+  function flagImg(id) {
     if (!id || id.length !== 2) return '';
-    const codePoints = id.toUpperCase().split('').map(function (ch) { return 127397 + ch.charCodeAt(0); });
-    return String.fromCodePoint.apply(null, codePoints);
+    const code = id.toLowerCase();
+    return '<img class="flag-icon" src="https://flagcdn.com/' + code + '.svg" alt="" loading="lazy">';
   }
 
   function formatFee(country) {
@@ -405,7 +406,7 @@
       return (
         '<div class="country-card' + highlighted + '" data-id="' + c.id + '">' +
           '<div class="card-top">' +
-            '<div><div class="card-name">' + flagEmoji(c.id) + ' ' + escapeHtml(c.name) + '</div>' +
+            '<div><div class="card-name">' + flagImg(c.id) + escapeHtml(c.name) + '</div>' +
             (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + '</div>' : '') + '</div>' +
             '<div class="card-badges"><span class="badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</span>' + safetyBadge + heritageBadge + vaccineBadge + '</div>' +
           '</div>' +
@@ -506,7 +507,7 @@
         return (
           '<li class="route-item" data-id="' + id + '">' +
             '<span class="order">' + (idx + 1) + '</span>' +
-            '<div class="info"><div class="name">' + flagEmoji(c.id) + ' ' + escapeHtml(c.name) + visitLabel + '</div>' +
+            '<div class="info"><div class="name">' + flagImg(c.id) + escapeHtml(c.name) + visitLabel + '</div>' +
             '<div class="fee">' + VISA_LABELS[c.visaType] + (fee ? ' · ' + escapeHtml(fee) : '') + (duration !== null ? ' · ' + duration + '天' : '') + '</div>' +
             timeLine +
             legLine + '</div>' +
@@ -1367,7 +1368,7 @@
       const c = findCountry(g.id.toLowerCase());
       if (!c) {
         tooltip.innerHTML =
-          '<div class="tt-name">' + flagEmoji(g.id) + ' ' + escapeHtml(getMapLabelName(g.id)) + '</div>' +
+          '<div class="tt-name">' + flagImg(g.id) + escapeHtml(getMapLabelName(g.id)) + '</div>' +
           '<div class="tt-badge">尚無簽證資料</div>';
         tooltip.hidden = false;
         return;
@@ -1375,7 +1376,7 @@
       const fee = formatFee(c);
       const heritageCount = c.heritageSites ? c.heritageSites.length : 0;
       tooltip.innerHTML =
-        '<div class="tt-name">' + flagEmoji(c.id) + ' ' + escapeHtml(c.name) + '</div>' +
+        '<div class="tt-name">' + flagImg(c.id) + escapeHtml(c.name) + '</div>' +
         '<div class="tt-badge badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</div>' +
         (c.stayDays ? '<div>可停留 ' + c.stayDays + ' 天</div>' : '') +
         (fee ? '<div>' + escapeHtml(fee) + '</div>' : '') +

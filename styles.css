@@ -483,6 +483,15 @@ a { color: var(--gold-bright); }
   100% { box-shadow: 0 0 0 2px var(--gold-bright), 0 0 16px rgba(255, 224, 138, 0.5); background: var(--bg-inset); }
 }
 
+.flag-icon {
+  width: 1.3em;
+  height: auto;
+  vertical-align: -0.15em;
+  margin-right: 6px;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
 .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .card-name { font-weight: 700; font-size: 1.6rem; color: var(--text); }
 .card-name-en { font-size: 1.08rem; color: var(--text-dim); font-family: var(--mono); }
