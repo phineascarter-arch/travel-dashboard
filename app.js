@@ -284,6 +284,15 @@ import { animate, stagger } from 'motion';
   const TRANSPORT_ICONS = { flight: '✈', land: '🚌', sea: '⛴' };
   const TRANSPORT_LABELS = { flight: '飛機', land: '陸路', sea: '海路' };
 
+  // One color per stop position in the route (not per country/visa-type), so the same stop
+  // reads as the same color everywhere it shows up — map dot, Gantt bar, route list order
+  // number, activity log — making it easy to trace "which stop is this" across views. Cycles
+  // if the route has more stops than colors.
+  const ROUTE_ORDER_COLORS = ['#ff6b6b', '#4fd6ff', '#8ee060', '#e8b84f', '#c496ff', '#ff9d3f', '#5ee6c4', '#ff6bd6', '#a3e635', '#6b8cff'];
+  function orderColor(zeroBasedIdx) {
+    return ROUTE_ORDER_COLORS[zeroBasedIdx % ROUTE_ORDER_COLORS.length];
+  }
+
   function haversineKm(lat1, lng1, lat2, lng2) {
     const R = 6371;
     const toRad = function (d) { return (d * Math.PI) / 180; };
@@ -627,7 +636,7 @@ import { animate, stagger } from 'motion';
         const timeLine = timeInfo ? '<div class="local-time" data-tz="' + escapeHtml(c.tz) + '">🕐 ' + timeInfo.timeStr + (timeInfo.diffLabel ? '（' + timeInfo.diffLabel + '）' : '') + '</div>' : '';
         return (
           '<li class="route-item" data-id="' + id + '">' +
-            '<span class="order">' + (idx + 1) + '</span>' +
+            '<span class="order" style="color:' + orderColor(idx) + '">' + (idx + 1) + '</span>' +
             '<div class="info"><div class="name">' + flagImg(c.id) + escapeHtml(c.name) + visitLabel + '</div>' +
             '<div class="fee">' + VISA_LABELS[c.visaType] + (fee ? ' · ' + escapeHtml(fee) : '') + (duration !== null ? ' · ' + duration + '天' : '') + '</div>' +
             timeLine +
@@ -802,7 +811,7 @@ import { animate, stagger } from 'motion';
       const tip = s.country.name + ' ' + s.sched.arrive + ' → ' + s.sched.depart + '（' + s.duration + '天）' +
         (isOverstay ? ' ⚠超過天數上限' : '') + (isOverlap ? ' ⚠與前一站日期重疊' : '');
 
-      rowsHtml += '<div class="timeline-row"><div class="' + cls.join(' ') + '" data-id="' + s.id + '" style="left:' + left + 'px;width:' + width + 'px" title="' + escapeHtml(tip) + '">' +
+      rowsHtml += '<div class="timeline-row"><div class="' + cls.join(' ') + '" data-id="' + s.id + '" style="left:' + left + 'px;width:' + width + 'px;color:' + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '">' +
         '<span class="order">' + (routeIdx + 1) + '</span><span>' + escapeHtml(s.country.name) + '</span><span>' + s.duration + '天</span>' +
         '</div></div>';
     });
@@ -1576,6 +1585,41 @@ import { animate, stagger } from 'motion';
     });
   }
 
+  // A bounding-box center is a fine label point for a blob-shaped country, but for a thin,
+  // curved, or multi-part one (Vietnam's coastal S-curve, archipelagos, etc.) it can land
+  // outside the actual landmass entirely — the box center just isn't the same thing as "a
+  // point inside the shape". Falls back to a grid search for the closest point that's
+  // actually inside one of the country's own paths.
+  function countryLabelPoint(g) {
+    const bbox = g.getBBox();
+    const cx = bbox.x + bbox.width / 2, cy = bbox.y + bbox.height / 2;
+    const shapes = g.querySelectorAll('path, polygon, circle');
+    if (!shapes.length || !bbox.width || !bbox.height) return { x: cx, y: cy };
+    const svg = g.ownerSVGElement;
+    const pt = svg.createSVGPoint();
+    function isInside(x, y) {
+      pt.x = x; pt.y = y;
+      for (let i = 0; i < shapes.length; i++) {
+        const el = shapes[i];
+        try { if (el.isPointInFill && el.isPointInFill(pt)) return true; } catch (e) { /* non-fillable shape */ }
+      }
+      return false;
+    }
+    if (isInside(cx, cy)) return { x: cx, y: cy };
+    const steps = 20;
+    let best = null, bestDist = Infinity;
+    for (let i = 0; i <= steps; i++) {
+      for (let j = 0; j <= steps; j++) {
+        const x = bbox.x + (bbox.width * i) / steps;
+        const y = bbox.y + (bbox.height * j) / steps;
+        if (!isInside(x, y)) continue;
+        const d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+        if (d < bestDist) { bestDist = d; best = { x: x, y: y }; }
+      }
+    }
+    return best || { x: cx, y: cy };
+  }
+
   function renderRouteLines() {
     if (!mapSvg || !routeLinesLayer) return;
     routeLinesLayer.innerHTML = '';
@@ -1584,8 +1628,8 @@ import { animate, stagger } from 'motion';
       const g = mapGroups[stop.countryId];
       if (!g) return;
       try {
-        const bbox = g.getBBox();
-        points.push({ id: stop.countryId, stopId: stop.id, x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2, order: idx + 1 });
+        const p = countryLabelPoint(g);
+        points.push({ id: stop.countryId, stopId: stop.id, x: p.x, y: p.y, order: idx + 1 });
       } catch (e) { /* element not rendered yet */ }
     });
 
@@ -1619,6 +1663,7 @@ import { animate, stagger } from 'motion';
         dot.setAttribute('cx', p.x);
         dot.setAttribute('cy', p.y);
         dot.setAttribute('r', 4.5);
+        dot.style.fill = orderColor(p.order - 1);
         g.appendChild(dot);
         const text = document.createElementNS(svgNS, 'text');
         text.setAttribute('class', 'route-order');

@@ -5227,6 +5227,10 @@
     };
     const TRANSPORT_ICONS = { flight: "\u2708", land: "\u{1F68C}", sea: "\u26F4" };
     const TRANSPORT_LABELS = { flight: "\u98DB\u6A5F", land: "\u9678\u8DEF", sea: "\u6D77\u8DEF" };
+    const ROUTE_ORDER_COLORS = ["#ff6b6b", "#4fd6ff", "#8ee060", "#e8b84f", "#c496ff", "#ff9d3f", "#5ee6c4", "#ff6bd6", "#a3e635", "#6b8cff"];
+    function orderColor(zeroBasedIdx) {
+      return ROUTE_ORDER_COLORS[zeroBasedIdx % ROUTE_ORDER_COLORS.length];
+    }
     function haversineKm(lat1, lng1, lat2, lng2) {
       const R = 6371;
       const toRad = function(d) {
@@ -5506,7 +5510,7 @@
           }).length + "\u6B21\uFF09" : "";
           const timeInfo = getLocalTimeInfo(c.tz);
           const timeLine = timeInfo ? '<div class="local-time" data-tz="' + escapeHtml(c.tz) + '">\u{1F550} ' + timeInfo.timeStr + (timeInfo.diffLabel ? "\uFF08" + timeInfo.diffLabel + "\uFF09" : "") + "</div>" : "";
-          return '<li class="route-item" data-id="' + id + '"><span class="order">' + (idx + 1) + '</span><div class="info"><div class="name">' + flagImg(c.id) + escapeHtml(c.name) + visitLabel + '</div><div class="fee">' + VISA_LABELS[c.visaType] + (fee ? " \xB7 " + escapeHtml(fee) : "") + (duration !== null ? " \xB7 " + duration + "\u5929" : "") + "</div>" + timeLine + legLine + '</div><div class="move-btns"><button data-action="move-up" data-id="' + id + '" ' + (idx === 0 ? "disabled" : "") + '>\u25B2</button><button data-action="move-down" data-id="' + id + '" ' + (idx === state.route.length - 1 ? "disabled" : "") + '>\u25BC</button></div><button class="btn btn-small btn-ghost" data-action="remove-route" data-id="' + id + '">\u79FB\u9664</button><div class="date-row"><input type="date" data-action="date-arrive" data-id="' + id + '" value="' + (sched.arrive || "") + '"><span class="date-sep">\u2192</span><input type="date" data-action="date-depart" data-id="' + id + '" value="' + (sched.depart || "") + '"></div>' + warning2 + renderCitySectionHtml(id, duration, c) + "</li>";
+          return '<li class="route-item" data-id="' + id + '"><span class="order" style="color:' + orderColor(idx) + '">' + (idx + 1) + '</span><div class="info"><div class="name">' + flagImg(c.id) + escapeHtml(c.name) + visitLabel + '</div><div class="fee">' + VISA_LABELS[c.visaType] + (fee ? " \xB7 " + escapeHtml(fee) : "") + (duration !== null ? " \xB7 " + duration + "\u5929" : "") + "</div>" + timeLine + legLine + '</div><div class="move-btns"><button data-action="move-up" data-id="' + id + '" ' + (idx === 0 ? "disabled" : "") + '>\u25B2</button><button data-action="move-down" data-id="' + id + '" ' + (idx === state.route.length - 1 ? "disabled" : "") + '>\u25BC</button></div><button class="btn btn-small btn-ghost" data-action="remove-route" data-id="' + id + '">\u79FB\u9664</button><div class="date-row"><input type="date" data-action="date-arrive" data-id="' + id + '" value="' + (sched.arrive || "") + '"><span class="date-sep">\u2192</span><input type="date" data-action="date-depart" data-id="' + id + '" value="' + (sched.depart || "") + '"></div>' + warning2 + renderCitySectionHtml(id, duration, c) + "</li>";
         }).join("");
         const totals = {};
         let unknownCount = 0;
@@ -5654,7 +5658,7 @@
         if (isOverstay) cls.push("overstay");
         if (isOverlap) cls.push("overlap");
         const tip = s.country.name + " " + s.sched.arrive + " \u2192 " + s.sched.depart + "\uFF08" + s.duration + "\u5929\uFF09" + (isOverstay ? " \u26A0\u8D85\u904E\u5929\u6578\u4E0A\u9650" : "") + (isOverlap ? " \u26A0\u8207\u524D\u4E00\u7AD9\u65E5\u671F\u91CD\u758A" : "");
-        rowsHtml += '<div class="timeline-row"><div class="' + cls.join(" ") + '" data-id="' + s.id + '" style="left:' + left + "px;width:" + width + 'px" title="' + escapeHtml(tip) + '"><span class="order">' + (routeIdx + 1) + "</span><span>" + escapeHtml(s.country.name) + "</span><span>" + s.duration + "\u5929</span></div></div>";
+        rowsHtml += '<div class="timeline-row"><div class="' + cls.join(" ") + '" data-id="' + s.id + '" style="left:' + left + "px;width:" + width + "px;color:" + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '"><span class="order">' + (routeIdx + 1) + "</span><span>" + escapeHtml(s.country.name) + "</span><span>" + s.duration + "\u5929</span></div></div>";
       });
       track.style.width = trackWidth + "px";
       track.innerHTML = gridHtml + '<div class="timeline-rows">' + rowsHtml + "</div>";
@@ -6310,6 +6314,42 @@
         g.insertBefore(title, g.firstChild);
       });
     }
+    function countryLabelPoint(g) {
+      const bbox = g.getBBox();
+      const cx = bbox.x + bbox.width / 2, cy = bbox.y + bbox.height / 2;
+      const shapes = g.querySelectorAll("path, polygon, circle");
+      if (!shapes.length || !bbox.width || !bbox.height) return { x: cx, y: cy };
+      const svg = g.ownerSVGElement;
+      const pt = svg.createSVGPoint();
+      function isInside(x, y) {
+        pt.x = x;
+        pt.y = y;
+        for (let i = 0; i < shapes.length; i++) {
+          const el = shapes[i];
+          try {
+            if (el.isPointInFill && el.isPointInFill(pt)) return true;
+          } catch (e) {
+          }
+        }
+        return false;
+      }
+      if (isInside(cx, cy)) return { x: cx, y: cy };
+      const steps = 20;
+      let best = null, bestDist = Infinity;
+      for (let i = 0; i <= steps; i++) {
+        for (let j = 0; j <= steps; j++) {
+          const x = bbox.x + bbox.width * i / steps;
+          const y = bbox.y + bbox.height * j / steps;
+          if (!isInside(x, y)) continue;
+          const d = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+          if (d < bestDist) {
+            bestDist = d;
+            best = { x, y };
+          }
+        }
+      }
+      return best || { x: cx, y: cy };
+    }
     function renderRouteLines() {
       if (!mapSvg || !routeLinesLayer) return;
       routeLinesLayer.innerHTML = "";
@@ -6318,8 +6358,8 @@
         const g = mapGroups[stop.countryId];
         if (!g) return;
         try {
-          const bbox = g.getBBox();
-          points.push({ id: stop.countryId, stopId: stop.id, x: bbox.x + bbox.width / 2, y: bbox.y + bbox.height / 2, order: idx + 1 });
+          const p = countryLabelPoint(g);
+          points.push({ id: stop.countryId, stopId: stop.id, x: p.x, y: p.y, order: idx + 1 });
         } catch (e) {
         }
       });
@@ -6352,6 +6392,7 @@
           dot.setAttribute("cx", p.x);
           dot.setAttribute("cy", p.y);
           dot.setAttribute("r", 4.5);
+          dot.style.fill = orderColor(p.order - 1);
           g.appendChild(dot);
           const text = document.createElementNS(svgNS, "text");
           text.setAttribute("class", "route-order");
