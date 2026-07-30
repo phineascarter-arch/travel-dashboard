@@ -6117,11 +6117,46 @@
         text.textContent = p.order;
         routeLinesLayer.appendChild(text);
       });
+      fitMapToPoints(points);
     }
     let zoomScale = 1, panX = 0, panY = 0;
     let mapDragging = false, mapDragMoved = false, dragStartX = 0, dragStartY = 0, dragStartPanX = 0, dragStartPanY = 0;
     function applyMapTransform() {
       mapSvg.style.transform = "translate(" + panX + "px," + panY + "px) scale(" + zoomScale + ")";
+    }
+    function fitMapToPoints(points) {
+      const host = document.getElementById("timelineMapContainer");
+      const viewport = document.getElementById("timelineMapViewport");
+      if (!mapSvg || !host || !viewport || !host.contains(mapSvg)) return;
+      if (!points.length) {
+        zoomScale = 1;
+        panX = 0;
+        panY = 0;
+        applyMapTransform();
+        return;
+      }
+      const vb = mapSvg.viewBox.baseVal;
+      const baseScale = viewport.clientWidth / vb.width;
+      const minX = Math.min.apply(null, points.map(function(p) {
+        return p.x;
+      }));
+      const maxX = Math.max.apply(null, points.map(function(p) {
+        return p.x;
+      }));
+      const minY = Math.min.apply(null, points.map(function(p) {
+        return p.y;
+      }));
+      const maxY = Math.max.apply(null, points.map(function(p) {
+        return p.y;
+      }));
+      const pad = Math.max(vb.width, vb.height) * 0.08;
+      const spanX = Math.max(maxX - minX, vb.width * 0.04) + pad * 2;
+      const spanY = Math.max(maxY - minY, vb.height * 0.04) + pad * 2;
+      const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+      zoomScale = Math.min(6, Math.max(1, Math.min(viewport.clientWidth / (spanX * baseScale), viewport.clientHeight / (spanY * baseScale))));
+      panX = viewport.clientWidth / 2 - zoomScale * baseScale * cx;
+      panY = viewport.clientHeight / 2 - zoomScale * baseScale * cy;
+      applyMapTransform();
     }
     function setupMapZoomPan() {
       const viewport = document.getElementById("mapViewport");

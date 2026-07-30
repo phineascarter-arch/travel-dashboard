@@ -1509,6 +1509,8 @@ import { animate, stagger } from 'motion';
       text.textContent = p.order;
       routeLinesLayer.appendChild(text);
     });
+
+    fitMapToPoints(points);
   }
 
   // ---------- zoom & pan ----------
@@ -1517,6 +1519,33 @@ import { animate, stagger } from 'motion';
 
   function applyMapTransform() {
     mapSvg.style.transform = 'translate(' + panX + 'px,' + panY + 'px) scale(' + zoomScale + ')';
+  }
+
+  // The timeline tab's map preview has no zoom/pan controls of its own (it's a read-only
+  // snapshot, not the interactive #mapViewport), so a route clustered in one region — most
+  // routes — used to render as a few pixels on a whole-world view. Auto-frame it instead.
+  function fitMapToPoints(points) {
+    const host = document.getElementById('timelineMapContainer');
+    const viewport = document.getElementById('timelineMapViewport');
+    if (!mapSvg || !host || !viewport || !host.contains(mapSvg)) return;
+
+    if (!points.length) { zoomScale = 1; panX = 0; panY = 0; applyMapTransform(); return; }
+
+    const vb = mapSvg.viewBox.baseVal;
+    const baseScale = viewport.clientWidth / vb.width;
+    const minX = Math.min.apply(null, points.map(function (p) { return p.x; }));
+    const maxX = Math.max.apply(null, points.map(function (p) { return p.x; }));
+    const minY = Math.min.apply(null, points.map(function (p) { return p.y; }));
+    const maxY = Math.max.apply(null, points.map(function (p) { return p.y; }));
+    const pad = Math.max(vb.width, vb.height) * 0.08;
+    const spanX = Math.max(maxX - minX, vb.width * 0.04) + pad * 2;
+    const spanY = Math.max(maxY - minY, vb.height * 0.04) + pad * 2;
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+
+    zoomScale = Math.min(6, Math.max(1, Math.min(viewport.clientWidth / (spanX * baseScale), viewport.clientHeight / (spanY * baseScale))));
+    panX = viewport.clientWidth / 2 - zoomScale * baseScale * cx;
+    panY = viewport.clientHeight / 2 - zoomScale * baseScale * cy;
+    applyMapTransform();
   }
 
   function setupMapZoomPan() {
