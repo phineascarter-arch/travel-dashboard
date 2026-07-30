@@ -504,7 +504,7 @@
         return (
           '<li class="route-item" data-id="' + id + '">' +
             '<span class="order">' + (idx + 1) + '</span>' +
-            '<div class="info"><div class="name">' + escapeHtml(c.name) + visitLabel + '</div>' +
+            '<div class="info"><div class="name">' + flagEmoji(c.id) + ' ' + escapeHtml(c.name) + visitLabel + '</div>' +
             '<div class="fee">' + VISA_LABELS[c.visaType] + (fee ? ' · ' + escapeHtml(fee) : '') + (duration !== null ? ' · ' + duration + '天' : '') + '</div>' +
             timeLine +
             legLine + '</div>' +
