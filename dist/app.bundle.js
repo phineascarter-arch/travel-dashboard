@@ -5060,6 +5060,13 @@
         emergencyCard: { insurerName: "", insurerPhone: "", medicalNote: "", passportNo: "", cards: [], contacts: [] }
       };
     }
+    function mergeState(defaults, saved) {
+      const merged = Object.assign({}, defaults, saved || {});
+      ["checklist", "budget", "emergencyCard"].forEach(function(key) {
+        merged[key] = Object.assign({}, defaults[key], saved && saved[key] || {});
+      });
+      return merged;
+    }
     function migrateRoute(route) {
       if (!Array.isArray(route)) return [];
       return route.map(function(entry) {
@@ -5072,7 +5079,7 @@
         const raw = localStorage.getItem(STORAGE_KEY);
         if (!raw) throw new Error("empty");
         const parsed = JSON.parse(raw);
-        const merged = Object.assign(defaultState(), parsed);
+        const merged = mergeState(defaultState(), parsed);
         merged.route = migrateRoute(merged.route);
         return merged;
       } catch (e) {
@@ -6185,7 +6192,7 @@
         try {
           const parsed = JSON.parse(reader.result);
           if (!confirm("\u532F\u5165\u5C07\u6703\u8986\u84CB\u76EE\u524D\u7684\u8CC7\u6599\uFF0C\u78BA\u5B9A\u8981\u7E7C\u7E8C\u55CE\uFF1F")) return;
-          state = Object.assign(defaultState(), parsed);
+          state = mergeState(defaultState(), parsed);
           state.route = migrateRoute(state.route);
           saveState();
           renderAll();

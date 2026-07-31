@@ -96,6 +96,23 @@ import { animate, stagger } from 'motion';
     };
   }
 
+  // A plain Object.assign(defaultState(), saved) only merges top-level keys — if `saved`
+  // already has e.g. `checklist` but from before `customGeneral`/`customCountry` existed on
+  // it, the whole default sub-object gets replaced by the incomplete saved one instead of
+  // topped up. Every render that then touches the missing field throws, and since renderAll()
+  // calls its render functions in a plain unguarded sequence, that one throw silently skips
+  // every render still queued after it (confirmed: an old-shaped checklist object left both
+  // the checklist tab AND the emergency tab's mission list blank on load). Merge these
+  // specific nested defaults one level deep so a saved state from any past schema version
+  // still has every field newer code expects.
+  function mergeState(defaults, saved) {
+    const merged = Object.assign({}, defaults, saved || {});
+    ['checklist', 'budget', 'emergencyCard'].forEach(function (key) {
+      merged[key] = Object.assign({}, defaults[key], (saved && saved[key]) || {});
+    });
+    return merged;
+  }
+
   // route entries used to be plain country-id strings (one visit per country, max).
   // Migrate to { id: stopId, countryId } objects so a country can be visited more than
   // once (e.g. transiting the same hub twice). Reusing the old country id as the stopId
@@ -114,7 +131,7 @@ import { animate, stagger } from 'motion';
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) throw new Error('empty');
       const parsed = JSON.parse(raw);
-      const merged = Object.assign(defaultState(), parsed);
+      const merged = mergeState(defaultState(), parsed);
       merged.route = migrateRoute(merged.route);
       return merged;
     } catch (e) {
@@ -1417,7 +1434,7 @@ import { animate, stagger } from 'motion';
       try {
         const parsed = JSON.parse(reader.result);
         if (!confirm('匯入將會覆蓋目前的資料，確定要繼續嗎？')) return;
-        state = Object.assign(defaultState(), parsed);
+        state = mergeState(defaultState(), parsed);
         state.route = migrateRoute(state.route);
         saveState();
         renderAll();
