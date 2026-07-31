@@ -174,8 +174,20 @@ import { animate, stagger } from 'motion';
     return seeded.concat(custom);
   }
 
+  // findCountry() is called from inside per-stop loops all over rendering (legs, checklist,
+  // budget, timeline...), often several times per stop per render. Routing it through
+  // getAllCountries() meant every single lookup rebuilt and Object.assign'd all 152+ seeded
+  // countries just to return one of them — O(route length × 152) work per render pass.
+  // Measured ~100ms for a single reorder on a 21-stop route; this does the same lookup
+  // without building (or discarding) the other 150+ entries.
   function findCountry(id) {
-    return getAllCountries().find(function (c) { return c.id === id; });
+    if (!id) return undefined;
+    const custom = state.customCountries.find(function (c) { return c.id === id; });
+    if (custom) return Object.assign({}, custom, { isCustom: true });
+    const seeded = SEED_COUNTRIES.find(function (c) { return c.id === id; });
+    if (!seeded) return undefined;
+    const ov = state.overrides[id];
+    return ov ? Object.assign({}, seeded, ov, { isCustom: false }) : Object.assign({}, seeded, { isCustom: false });
   }
 
   // Every country id in this dataset is its ISO 3166-1 alpha-2 code (lowercase), which is also

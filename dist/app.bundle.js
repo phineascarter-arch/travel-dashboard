@@ -5114,9 +5114,17 @@
       return seeded.concat(custom);
     }
     function findCountry(id) {
-      return getAllCountries().find(function(c) {
+      if (!id) return void 0;
+      const custom = state.customCountries.find(function(c) {
         return c.id === id;
       });
+      if (custom) return Object.assign({}, custom, { isCustom: true });
+      const seeded = SEED_COUNTRIES.find(function(c) {
+        return c.id === id;
+      });
+      if (!seeded) return void 0;
+      const ov = state.overrides[id];
+      return ov ? Object.assign({}, seeded, ov, { isCustom: false }) : Object.assign({}, seeded, { isCustom: false });
     }
     function flagImg(id) {
       if (!id || id.length !== 2) return "";
