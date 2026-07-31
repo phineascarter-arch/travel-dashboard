@@ -143,7 +143,15 @@ import { animate, stagger } from 'motion';
   let selectedId = null;
 
   function saveState() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    // Safari private browsing (and a full quota, in principle) throws synchronously on
+    // setItem. Uncaught, that would abort whatever the user just did mid-action — the app
+    // still works fine for the rest of the session in memory, it just won't persist across
+    // reloads, which is the expected tradeoff of private browsing anyway.
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.warn('Could not save state (storage unavailable or full):', e);
+    }
   }
 
   function newStopId() {
@@ -1945,7 +1953,7 @@ import { animate, stagger } from 'motion';
     document.querySelectorAll('.tab-panel').forEach(function (panel) {
       panel.hidden = panel.getAttribute('data-tab-panel') !== tab;
     });
-    localStorage.setItem(TAB_STORAGE_KEY, tab);
+    try { localStorage.setItem(TAB_STORAGE_KEY, tab); } catch (e) { /* private browsing etc. — tab switch itself still works */ }
     relocateMap(tab);
     // route-line positions need live layout (getBBox), which a hidden map container can't
     // provide — refresh once the map has landed somewhere visible.
@@ -2490,7 +2498,10 @@ import { animate, stagger } from 'motion';
     }).then(function (data) {
       if (!data || !data.rates) throw new Error('no rates');
       rates = data.rates;
-      localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({ rates: rates, fetchedAt: Date.now() }));
+      // A caching failure here (private browsing, full quota) must not fall through to the
+      // .catch() below — that would wrongly discard rates we already successfully fetched
+      // live and report the connection as failed.
+      try { localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({ rates: rates, fetchedAt: Date.now() })); } catch (e) { /* not fatal */ }
       setRateStatus(true, data.time_last_update_utc ? '更新於 ' + data.time_last_update_utc : '');
       renderCurrencyAndBudget();
     }).catch(function () {

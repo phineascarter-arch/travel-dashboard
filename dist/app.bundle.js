@@ -5089,7 +5089,11 @@
     let state = loadState();
     let selectedId = null;
     function saveState() {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.warn("Could not save state (storage unavailable or full):", e);
+      }
     }
     function newStopId() {
       return "stop_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -6629,7 +6633,10 @@
       document.querySelectorAll(".tab-panel").forEach(function(panel) {
         panel.hidden = panel.getAttribute("data-tab-panel") !== tab;
       });
-      localStorage.setItem(TAB_STORAGE_KEY, tab);
+      try {
+        localStorage.setItem(TAB_STORAGE_KEY, tab);
+      } catch (e) {
+      }
       relocateMap(tab);
       if (tab === "map" || tab === "timeline") renderRoute();
     }
@@ -7065,7 +7072,10 @@
       }).then(function(data) {
         if (!data || !data.rates) throw new Error("no rates");
         rates = data.rates;
-        localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({ rates, fetchedAt: Date.now() }));
+        try {
+          localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({ rates, fetchedAt: Date.now() }));
+        } catch (e) {
+        }
         setRateStatus(true, data.time_last_update_utc ? "\u66F4\u65B0\u65BC " + data.time_last_update_utc : "");
         renderCurrencyAndBudget();
       }).catch(function() {
