@@ -252,7 +252,12 @@ import { animate, stagger } from 'motion';
     const url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1' +
       (job.countryCode ? '&countrycodes=' + encodeURIComponent(job.countryCode) : '') +
       '&q=' + encodeURIComponent(job.name);
-    fetch(url).then(function (res) {
+    // fetch() has no built-in timeout — on a flaky mobile connection (the exact situation this
+    // feature exists for) a hung request would otherwise leave geocodeQueueBusy stuck true
+    // forever, silently freezing every city added afterwards at "定位中" with no error shown.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(function () { controller.abort(); }, 8000);
+    fetch(url, { signal: controller.signal }).then(function (res) {
       if (!res.ok) throw new Error('geocode http ' + res.status);
       return res.json();
     }).then(function (results) {
@@ -271,6 +276,7 @@ import { animate, stagger } from 'motion';
       const city = findCityEntry(job.stopId, job.cityId);
       if (city) { city.geocodeStatus = 'error'; saveState(); }
     }).then(function () {
+      clearTimeout(timeoutId);
       // Nominatim's usage policy caps this at ~1 request/second.
       setTimeout(function () { geocodeQueueBusy = false; runGeocodeQueue(); }, 1100);
     });
@@ -2473,7 +2479,12 @@ import { animate, stagger } from 'motion';
     let cached = null;
     try { cached = JSON.parse(localStorage.getItem(RATES_CACHE_KEY) || 'null'); } catch (e) { cached = null; }
 
-    fetch(RATES_URL).then(function (res) {
+    // Without a timeout, a hung request (unreliable mobile data — again, exactly this app's
+    // use case) leaves `rates` null forever: the .catch() below is what falls back to cached
+    // or built-in rates, but that fallback never runs if the request just never resolves.
+    const controller = new AbortController();
+    setTimeout(function () { controller.abort(); }, 8000);
+    fetch(RATES_URL, { signal: controller.signal }).then(function (res) {
       if (!res.ok) throw new Error('bad response');
       return res.json();
     }).then(function (data) {

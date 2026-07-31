@@ -5183,7 +5183,11 @@
       geocodeQueueBusy = true;
       const job = geocodeQueue.shift();
       const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1" + (job.countryCode ? "&countrycodes=" + encodeURIComponent(job.countryCode) : "") + "&q=" + encodeURIComponent(job.name);
-      fetch(url).then(function(res) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(function() {
+        controller.abort();
+      }, 8e3);
+      fetch(url, { signal: controller.signal }).then(function(res) {
         if (!res.ok) throw new Error("geocode http " + res.status);
         return res.json();
       }).then(function(results) {
@@ -5205,6 +5209,7 @@
           saveState();
         }
       }).then(function() {
+        clearTimeout(timeoutId);
         setTimeout(function() {
           geocodeQueueBusy = false;
           runGeocodeQueue();
@@ -7050,7 +7055,11 @@
       } catch (e) {
         cached = null;
       }
-      fetch(RATES_URL).then(function(res) {
+      const controller = new AbortController();
+      setTimeout(function() {
+        controller.abort();
+      }, 8e3);
+      fetch(RATES_URL, { signal: controller.signal }).then(function(res) {
         if (!res.ok) throw new Error("bad response");
         return res.json();
       }).then(function(data) {
