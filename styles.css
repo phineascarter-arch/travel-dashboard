@@ -194,6 +194,12 @@ a { color: var(--gold-bright); }
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 16px;
+  /* Grid items default to min-width: auto, i.e. "never shrink below my content's intrinsic
+     width" — so a wide-enough child (a fixed-width input, a long unwrapped line) pushes the
+     whole panel past its grid track's width instead of wrapping inside it. Every tab is a
+     direct child of the .layout grid, so this alone was the root cause of horizontal overflow
+     showing up across almost every tab on narrow screens. */
+  min-width: 0;
 }
 
 /* ---------- toolbar ---------- */
@@ -992,4 +998,5 @@ a { color: var(--gold-bright); }
   .app-main { width: 100%; }
   .layout { padding: 0; }
   .panel.share-panel { background: none; border: none; padding: 0; }
+  .share-table { display: table; overflow-x: visible; }
 }
