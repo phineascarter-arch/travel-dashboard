@@ -553,6 +553,7 @@ import { animate, stagger } from 'motion';
       const powerLine = c.powerVoltage ? ('<div class="card-power">🔌 ' + escapeHtml(c.powerVoltage) + (c.powerPlug ? '・Type ' + escapeHtml(c.powerPlug) : '') + '</div>') : '';
       const seasonLine = c.bestSeason ? ('<div class="card-season">☀️ ' + escapeHtml(c.bestSeason) + '</div>') : '';
       const highlighted = c.id === selectedId ? ' highlighted' : '';
+      const passportBadge = c.passportNotRecognized ? '<span class="badge badge-passport-blocked" title="該國不承認中華民國護照，出發前務必向該國駐外機構或外交部查證">🚫 不承認台灣護照</span>' : '';
       const safetyBadge = c.safetyLevel ? '<span class="badge safety-badge-' + c.safetyLevel + '">🛡 ' + SAFETY_LABELS[c.safetyLevel] + '</span>' : '';
       const safetyNoteLine = c.safetyNote ? '<div class="card-safety-note">🛡 ' + escapeHtml(c.safetyNote) + '</div>' : '';
       const vaccineBadge = c.yellowFeverStatus ? '<span class="badge badge-vaccine-' + c.yellowFeverStatus + '" title="黃熱病疫苗證明規定">💉 ' + YELLOW_FEVER_LABELS[c.yellowFeverStatus] + '</span>' : '';
@@ -571,7 +572,7 @@ import { animate, stagger } from 'motion';
           '<div class="card-top">' +
             '<div><div class="card-name">' + flagImg(c.id) + escapeHtml(c.name) + '</div>' +
             (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + '</div>' : '') + '</div>' +
-            '<div class="card-badges"><span class="badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</span>' + safetyBadge + heritageBadge + vaccineBadge + '</div>' +
+            '<div class="card-badges">' + passportBadge + '<span class="badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</span>' + safetyBadge + heritageBadge + vaccineBadge + '</div>' +
           '</div>' +
           '<div class="card-meta">' + metaBits.map(function (b) { return '<span>' + escapeHtml(b) + '</span>'; }).join('') + '</div>' +
           powerLine +
@@ -1249,6 +1250,7 @@ import { animate, stagger } from 'motion';
     document.getElementById('f_note').value = country ? (country.note || '') : '';
     document.getElementById('f_safetyLevel').value = country ? (country.safetyLevel || '') : '';
     document.getElementById('f_safetyNote').value = country ? (country.safetyNote || '') : '';
+    document.getElementById('f_passportNotRecognized').checked = !!(country && country.passportNotRecognized);
     document.getElementById('f_yellowFeverStatus').value = country ? (country.yellowFeverStatus || '') : '';
     document.getElementById('f_healthNote').value = country ? (country.healthNote || '') : '';
     document.getElementById('f_personalNote').value = country ? (state.personalNotes[country.id] || '') : '';
@@ -1305,6 +1307,7 @@ import { animate, stagger } from 'motion';
       note: document.getElementById('f_note').value.trim(),
       safetyLevel: document.getElementById('f_safetyLevel').value || null,
       safetyNote: document.getElementById('f_safetyNote').value.trim(),
+      passportNotRecognized: document.getElementById('f_passportNotRecognized').checked,
       yellowFeverStatus: document.getElementById('f_yellowFeverStatus').value || null,
       healthNote: document.getElementById('f_healthNote').value.trim(),
     };
@@ -1571,6 +1574,7 @@ import { animate, stagger } from 'motion';
       const heritageCount = c.heritageSites ? c.heritageSites.length : 0;
       tooltip.innerHTML =
         '<div class="tt-name">' + flagImg(c.id) + escapeHtml(c.name) + '</div>' +
+        (c.passportNotRecognized ? '<div class="tt-badge badge-passport-blocked">🚫 不承認台灣護照</div>' : '') +
         '<div class="tt-badge badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</div>' +
         (c.stayDays ? '<div>可停留 ' + c.stayDays + ' 天</div>' : '') +
         (fee ? '<div>' + escapeHtml(fee) + '</div>' : '') +

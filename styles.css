@@ -522,6 +522,7 @@ a { color: var(--gold-bright); }
 .badge-restricted { color: var(--c-restricted); }
 
 .card-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.badge-passport-blocked { color: #ffe0e0; background: var(--c-restricted); border-color: var(--c-restricted); box-shadow: 0 0 8px rgba(255, 77, 109, 0.5); }
 .safety-badge-grey { color: var(--text-dim); }
 .safety-badge-yellow { color: #e0c94a; }
 .safety-badge-orange { color: var(--c-voa); }
@@ -530,6 +531,7 @@ a { color: var(--gold-bright); }
 
 .badge-heritage { color: #7fd9c4; border-color: #7fd9c4; }
 .tt-badge.badge-heritage { border: 1px solid #7fd9c4; border-radius: 3px; padding: 2px 6px; display: inline-block; }
+.tt-badge.badge-passport-blocked { border-radius: 3px; padding: 2px 6px; display: inline-block; margin-bottom: 4px; font-weight: 700; }
 
 .badge-vaccine-required { color: #ff8fa3; border-color: #ff8fa3; }
 .badge-vaccine-conditional { color: #c9788a; border-color: #c9788a; }
@@ -811,6 +813,8 @@ a { color: var(--gold-bright); }
 .modal label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; color: var(--text-dim); font-family: var(--sans); }
 .fee-row { display: flex; gap: 10px; }
 .fee-row label { flex: 1; }
+.modal label.checkbox-label { flex-direction: row; align-items: center; gap: 8px; }
+.modal label.checkbox-label input[type="checkbox"] { flex: none; accent-color: var(--c-restricted); width: 16px; height: 16px; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 6px; }
 
 /* ---------- currency page ---------- */
