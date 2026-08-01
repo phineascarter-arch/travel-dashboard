@@ -1536,6 +1536,25 @@ import { animate, stagger } from 'motion';
     // this interaction gets its target retargeted to the capturing viewport element, so
     // e.target.closest('g.country') can never resolve correctly for a real click.
 
+    // Clamped to the viewport so tapping a country near the right/bottom edge (easy to do on
+    // a narrower tablet screen) doesn't push the box partly off-screen — it flips to the other
+    // side of the pointer instead of just running past the edge.
+    function positionTooltip(e) {
+      const pad = 16;
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+      let left = e.clientX + pad, top = e.clientY + pad;
+      if (left + w > vw) left = e.clientX - w - pad;
+      if (top + h > vh) top = e.clientY - h - pad;
+      tooltip.style.left = Math.max(0, left) + 'px';
+      tooltip.style.top = Math.max(0, top) + 'px';
+    }
+
+    // Position is set here too (not only in the mousemove listener below), because on a
+    // touch device tapping a country fires mouseover without ever firing mousemove first —
+    // left/top would stay unset, and position:fixed with no top/left falls back to the
+    // element's static position in the document (far down the page, well past the map),
+    // instead of anywhere near the tapped country.
     mapSvg.addEventListener('mouseover', function (e) {
       const g = e.target.closest('g.country');
       if (!g) return;
@@ -1545,6 +1564,7 @@ import { animate, stagger } from 'motion';
           '<div class="tt-name">' + flagImg(g.id) + escapeHtml(getMapLabelName(g.id)) + '</div>' +
           '<div class="tt-badge">尚無簽證資料</div>';
         tooltip.hidden = false;
+        positionTooltip(e);
         return;
       }
       const fee = formatFee(c);
@@ -1557,11 +1577,11 @@ import { animate, stagger } from 'motion';
         (c.safetyLevel ? '<div class="tt-badge safety-badge-' + c.safetyLevel + '">🛡 ' + SAFETY_LABELS[c.safetyLevel] + '</div>' : '') +
         (heritageCount ? '<div class="tt-badge badge-heritage">🏛 ' + heritageCount + ' 項世界遺產</div>' : '');
       tooltip.hidden = false;
+      positionTooltip(e);
     });
     mapSvg.addEventListener('mousemove', function (e) {
       if (tooltip.hidden) return;
-      tooltip.style.left = (e.clientX + 16) + 'px';
-      tooltip.style.top = (e.clientY + 16) + 'px';
+      positionTooltip(e);
     });
     mapSvg.addEventListener('mouseout', function (e) {
       const g = e.target.closest('g.country');

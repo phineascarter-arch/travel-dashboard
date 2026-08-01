@@ -6265,6 +6265,16 @@
       routeLinesLayer = document.createElementNS("http://www.w3.org/2000/svg", "g");
       routeLinesLayer.setAttribute("id", "routeLinesLayer");
       mapSvg.appendChild(routeLinesLayer);
+      function positionTooltip(e) {
+        const pad = 16;
+        const vw2 = window.innerWidth, vh2 = window.innerHeight;
+        const w = tooltip.offsetWidth, h = tooltip.offsetHeight;
+        let left = e.clientX + pad, top = e.clientY + pad;
+        if (left + w > vw2) left = e.clientX - w - pad;
+        if (top + h > vh2) top = e.clientY - h - pad;
+        tooltip.style.left = Math.max(0, left) + "px";
+        tooltip.style.top = Math.max(0, top) + "px";
+      }
       mapSvg.addEventListener("mouseover", function(e) {
         const g = e.target.closest("g.country");
         if (!g) return;
@@ -6272,17 +6282,18 @@
         if (!c) {
           tooltip.innerHTML = '<div class="tt-name">' + flagImg(g.id) + escapeHtml(getMapLabelName(g.id)) + '</div><div class="tt-badge">\u5C1A\u7121\u7C3D\u8B49\u8CC7\u6599</div>';
           tooltip.hidden = false;
+          positionTooltip(e);
           return;
         }
         const fee = formatFee(c);
         const heritageCount = c.heritageSites ? c.heritageSites.length : 0;
         tooltip.innerHTML = '<div class="tt-name">' + flagImg(c.id) + escapeHtml(c.name) + '</div><div class="tt-badge badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + "</div>" + (c.stayDays ? "<div>\u53EF\u505C\u7559 " + c.stayDays + " \u5929</div>" : "") + (fee ? "<div>" + escapeHtml(fee) + "</div>" : "") + (c.safetyLevel ? '<div class="tt-badge safety-badge-' + c.safetyLevel + '">\u{1F6E1} ' + SAFETY_LABELS[c.safetyLevel] + "</div>" : "") + (heritageCount ? '<div class="tt-badge badge-heritage">\u{1F3DB} ' + heritageCount + " \u9805\u4E16\u754C\u907A\u7522</div>" : "");
         tooltip.hidden = false;
+        positionTooltip(e);
       });
       mapSvg.addEventListener("mousemove", function(e) {
         if (tooltip.hidden) return;
-        tooltip.style.left = e.clientX + 16 + "px";
-        tooltip.style.top = e.clientY + 16 + "px";
+        positionTooltip(e);
       });
       mapSvg.addEventListener("mouseout", function(e) {
         const g = e.target.closest("g.country");
