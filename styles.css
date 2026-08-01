@@ -770,6 +770,7 @@ a { color: var(--gold-bright); }
 .checklist-summary { font-family: var(--mono); font-size: 0.86rem; color: var(--text-dim); }
 
 .checklist-columns { display: grid; grid-template-columns: 260px 1fr; gap: 20px; }
+.checklist-columns > * { min-width: 0; }
 @media (max-width: 700px) { .checklist-columns { grid-template-columns: 1fr; } }
 
 .checklist-col h3 { margin: 0 0 8px; font-family: var(--mono); font-size: 0.92rem; color: var(--text-dim); letter-spacing: 0.5px; font-weight: 600; }
