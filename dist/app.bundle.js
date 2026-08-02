@@ -5384,7 +5384,10 @@
       if (f.region) list = list.filter(function(c) {
         return c.region === f.region;
       });
-      if (f.visaType) list = list.filter(function(c) {
+      if (f.visaType === "passport_blocked") list = list.filter(function(c) {
+        return c.passportNotRecognized;
+      });
+      else if (f.visaType) list = list.filter(function(c) {
         return c.visaType === f.visaType;
       });
       if (f.status) list = list.filter(function(c) {
