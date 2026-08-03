@@ -5103,8 +5103,9 @@
         return r.id === stopId;
       });
     }
+    let liveCountries = SEED_COUNTRIES;
     function getAllCountries() {
-      const seeded = SEED_COUNTRIES.map(function(c) {
+      const seeded = liveCountries.map(function(c) {
         const ov = state.overrides[c.id];
         return ov ? Object.assign({}, c, ov, { isCustom: false }) : Object.assign({}, c, { isCustom: false });
       });
@@ -5119,12 +5120,122 @@
         return c.id === id;
       });
       if (custom) return Object.assign({}, custom, { isCustom: true });
-      const seeded = SEED_COUNTRIES.find(function(c) {
+      const seeded = liveCountries.find(function(c) {
         return c.id === id;
       });
       if (!seeded) return void 0;
       const ov = state.overrides[id];
       return ov ? Object.assign({}, seeded, ov, { isCustom: false }) : Object.assign({}, seeded, { isCustom: false });
+    }
+    const COUNTRY_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkqHFYyvm9NOaZ7MQLn0luhe42t2MphSAZ1-m8PqNkoFj_8c4wwMcbRuPXCF_HBuC_wEv8zudJPp1a/pub?output=csv";
+    const COUNTRY_CSV_COLUMNS = {
+      id: "string",
+      name: "string",
+      nameEn: "string",
+      region: "string",
+      visaType: "string",
+      stayDays: "number",
+      fee: "number",
+      feeCurrency: "string",
+      powerVoltage: "string",
+      powerPlug: "string",
+      bestSeason: "string",
+      note: "string",
+      safetyLevel: "string",
+      safetyNote: "string",
+      passportNotRecognized: "bool",
+      yellowFeverStatus: "string",
+      healthNote: "string",
+      missionName: "string",
+      missionAddress: "string",
+      missionPhone: "string",
+      missionEmergencyPhone: "string",
+      tz: "string",
+      localEmergencyNumber: "string",
+      lat: "number",
+      lng: "number",
+      island: "bool",
+      heritageSites: "array"
+    };
+    function parseCsv(text) {
+      const rows = [];
+      let row = [], field = "", inQuotes = false;
+      for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (inQuotes) {
+          if (ch === '"') {
+            if (text[i + 1] === '"') {
+              field += '"';
+              i++;
+            } else {
+              inQuotes = false;
+            }
+          } else {
+            field += ch;
+          }
+        } else if (ch === '"') {
+          inQuotes = true;
+        } else if (ch === ",") {
+          row.push(field);
+          field = "";
+        } else if (ch === "\r") {
+        } else if (ch === "\n") {
+          row.push(field);
+          field = "";
+          rows.push(row);
+          row = [];
+        } else {
+          field += ch;
+        }
+      }
+      if (field !== "" || row.length) {
+        row.push(field);
+        rows.push(row);
+      }
+      return rows.filter(function(r) {
+        return r.length > 1 || r[0] !== "";
+      });
+    }
+    function coerceCsvRow(rawRow) {
+      const out = {};
+      Object.keys(COUNTRY_CSV_COLUMNS).forEach(function(col) {
+        const raw = rawRow[col];
+        const type = COUNTRY_CSV_COLUMNS[col];
+        if (raw === void 0 || raw === "") {
+          out[col] = type === "array" ? [] : type === "bool" ? false : null;
+          return;
+        }
+        if (type === "number") out[col] = Number(raw);
+        else if (type === "bool") out[col] = raw.trim().toUpperCase() === "TRUE";
+        else if (type === "array") out[col] = raw.split(";").map(function(s) {
+          return s.trim();
+        }).filter(Boolean);
+        else out[col] = raw;
+      });
+      return out;
+    }
+    function refreshCountryData() {
+      fetch(COUNTRY_SHEET_CSV_URL).then(function(res) {
+        return res.ok ? res.text() : Promise.reject(new Error("HTTP " + res.status));
+      }).then(function(text) {
+        const rows = parseCsv(text);
+        if (rows.length < 2) throw new Error("sheet returned no data rows");
+        const header = rows[0];
+        const parsed = rows.slice(1).map(function(cells) {
+          const rawRow = {};
+          header.forEach(function(col, i) {
+            rawRow[col] = cells[i];
+          });
+          return coerceCsvRow(rawRow);
+        }).filter(function(c) {
+          return c.id;
+        });
+        if (parsed.length < 100) throw new Error("parsed suspiciously few rows: " + parsed.length);
+        liveCountries = parsed;
+        renderAll();
+      }).catch(function(err) {
+        console.warn("Country sheet refresh failed, staying on bundled data:", err);
+      });
     }
     function flagImg(id) {
       if (!id || id.length !== 2) return "";
@@ -7193,5 +7304,6 @@
     renderAll();
     switchTab(localStorage.getItem(TAB_STORAGE_KEY) || "map");
     setInterval(updateRouteClocks, 6e4);
+    refreshCountryData();
   })();
 })();

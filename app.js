@@ -163,8 +163,16 @@ import { animate, stagger } from 'motion';
   }
 
   // ---------- data ----------
+  // Starts as the bundled data/seed-countries.js (loaded synchronously via <script> before this
+  // file runs, and cached by the service worker for offline use) so the app has something to
+  // render immediately with no loading state. refreshCountryData() below then tries to replace
+  // this with the live copy from the shared Google Sheet — a `let`, not the SEED_COUNTRIES
+  // const itself, since the seed script's binding can't be reassigned and other code (findCountry)
+  // needs to see the swap too.
+  let liveCountries = SEED_COUNTRIES;
+
   function getAllCountries() {
-    const seeded = SEED_COUNTRIES.map(function (c) {
+    const seeded = liveCountries.map(function (c) {
       const ov = state.overrides[c.id];
       return ov ? Object.assign({}, c, ov, { isCustom: false }) : Object.assign({}, c, { isCustom: false });
     });
@@ -184,10 +192,105 @@ import { animate, stagger } from 'motion';
     if (!id) return undefined;
     const custom = state.customCountries.find(function (c) { return c.id === id; });
     if (custom) return Object.assign({}, custom, { isCustom: true });
-    const seeded = SEED_COUNTRIES.find(function (c) { return c.id === id; });
+    const seeded = liveCountries.find(function (c) { return c.id === id; });
     if (!seeded) return undefined;
     const ov = state.overrides[id];
     return ov ? Object.assign({}, seeded, ov, { isCustom: false }) : Object.assign({}, seeded, { isCustom: false });
+  }
+
+  // Published (read-only, no auth needed) CSV export of the Google Sheet that mirrors
+  // data/seed-countries.js — lets country data (visa rules, fees, notes...) be corrected by
+  // editing a spreadsheet instead of shipping a code change through git + GitHub Pages' deploy
+  // lag. The bundled seed file stays as-is and is what renders first (see liveCountries above);
+  // this only ever *replaces* it after a successful fetch, so a network failure or a malformed
+  // sheet just leaves the app on the bundled copy instead of breaking anything.
+  const COUNTRY_SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRkqHFYyvm9NOaZ7MQLn0luhe42t2MphSAZ1-m8PqNkoFj_8c4wwMcbRuPXCF_HBuC_wEv8zudJPp1a/pub?output=csv';
+
+  // Column -> value-type, so parsed CSV rows come out shaped exactly like a hand-written
+  // SEED_COUNTRIES entry (getAllCountries/findCountry/every renderer downstream assume that
+  // shape — e.g. stayDays as a Number-or-null, heritageSites as an Array).
+  const COUNTRY_CSV_COLUMNS = {
+    id: 'string', name: 'string', nameEn: 'string', region: 'string', visaType: 'string',
+    stayDays: 'number', fee: 'number', feeCurrency: 'string',
+    powerVoltage: 'string', powerPlug: 'string', bestSeason: 'string', note: 'string',
+    safetyLevel: 'string', safetyNote: 'string', passportNotRecognized: 'bool',
+    yellowFeverStatus: 'string', healthNote: 'string',
+    missionName: 'string', missionAddress: 'string', missionPhone: 'string', missionEmergencyPhone: 'string',
+    tz: 'string', localEmergencyNumber: 'string', lat: 'number', lng: 'number',
+    island: 'bool', heritageSites: 'array',
+  };
+
+  // A minimal RFC 4180 CSV parser (quoted fields, "" escaping, embedded commas/newlines) — small
+  // enough to hand-roll rather than pull in a dependency for one sheet.
+  function parseCsv(text) {
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i];
+      if (inQuotes) {
+        if (ch === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+        } else {
+          field += ch;
+        }
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        row.push(field); field = '';
+      } else if (ch === '\r') {
+        // swallow; \n (or end of text) below is what actually ends the row
+      } else if (ch === '\n') {
+        row.push(field); field = '';
+        rows.push(row); row = [];
+      } else {
+        field += ch;
+      }
+    }
+    if (field !== '' || row.length) { row.push(field); rows.push(row); }
+    return rows.filter(function (r) { return r.length > 1 || r[0] !== ''; });
+  }
+
+  function coerceCsvRow(rawRow) {
+    const out = {};
+    Object.keys(COUNTRY_CSV_COLUMNS).forEach(function (col) {
+      const raw = rawRow[col];
+      const type = COUNTRY_CSV_COLUMNS[col];
+      if (raw === undefined || raw === '') {
+        out[col] = type === 'array' ? [] : (type === 'bool' ? false : null);
+        return;
+      }
+      if (type === 'number') out[col] = Number(raw);
+      else if (type === 'bool') out[col] = raw.trim().toUpperCase() === 'TRUE';
+      else if (type === 'array') out[col] = raw.split(';').map(function (s) { return s.trim(); }).filter(Boolean);
+      else out[col] = raw;
+    });
+    return out;
+  }
+
+  function refreshCountryData() {
+    fetch(COUNTRY_SHEET_CSV_URL)
+      .then(function (res) { return res.ok ? res.text() : Promise.reject(new Error('HTTP ' + res.status)); })
+      .then(function (text) {
+        const rows = parseCsv(text);
+        if (rows.length < 2) throw new Error('sheet returned no data rows');
+        const header = rows[0];
+        const parsed = rows.slice(1).map(function (cells) {
+          const rawRow = {};
+          header.forEach(function (col, i) { rawRow[col] = cells[i]; });
+          return coerceCsvRow(rawRow);
+        }).filter(function (c) { return c.id; });
+        // Sanity floor, not an exact match to 152 — the sheet is meant to be hand-edited, so a
+        // temporarily-added or removed row shouldn't be treated as corruption. What this guards
+        // against is a wildly malformed response (e.g. an HTML error page fetched as "text/csv").
+        if (parsed.length < 100) throw new Error('parsed suspiciously few rows: ' + parsed.length);
+        liveCountries = parsed;
+        renderAll();
+      })
+      .catch(function (err) {
+        // Deliberately silent to the user — the bundled seed data already rendered and is a
+        // perfectly usable copy, this was only ever a best-effort freshness upgrade.
+        console.warn('Country sheet refresh failed, staying on bundled data:', err);
+      });
   }
 
   // Every country id in this dataset is its ISO 3166-1 alpha-2 code (lowercase), which is also
@@ -2640,4 +2743,5 @@ import { animate, stagger } from 'motion';
   renderAll();
   switchTab(localStorage.getItem(TAB_STORAGE_KEY) || 'map');
   setInterval(updateRouteClocks, 60000);
+  refreshCountryData();
 })();
