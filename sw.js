@@ -1,7 +1,7 @@
 // Bump this on every deploy alongside index.html's ?v= cache-busting timestamp — it's what
 // actually forces stale app-shell files to drop, the query string mainly matters for the very
 // first (pre-service-worker) load.
-const CACHE_VERSION = 'v20260802090933';
+const CACHE_VERSION = 'v20260804071208';
 const APP_SHELL_CACHE = 'app-shell-' + CACHE_VERSION;
 const FLAG_CACHE = 'flags-v1';
 
@@ -76,18 +76,25 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // Everything else same-origin (the app shell files): cache-first for instant, offline-proof
-  // loads, refreshing the cache in the background whenever the network is available.
+  // Everything else same-origin (the app shell files): network-first, so anyone online always
+  // gets the current code, falling back to cache only when the network truly fails. This used
+  // to be cache-first (checked cache immediately, revalidated in the background) — offline-safe,
+  // but it meant a browser with an already-installed service worker could sit on stale JS/CSS
+  // indefinitely: cache-first happily returns a hit before the "fetch a fresh copy" step ever
+  // resolves, and once satisfied, respondWith() doesn't wait around for that background fetch to
+  // land. Concretely: the visa-filter dropdown gained a new option in a later deploy, but a
+  // browser that had this service worker from before kept serving the pre-fix app.bundle.js and
+  // the new filter option did nothing — the index.html shell updated (that path was already
+  // network-first) but the script behind it hadn't.
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(req, { ignoreSearch: true }).then(function (cached) {
-        const network = fetch(req).then(function (res) {
-          if (res.ok) {
-            caches.open(APP_SHELL_CACHE).then(function (cache) { cache.put(req, res.clone()); });
-          }
-          return res;
-        }).catch(function () { return cached; });
-        return cached || network;
+      fetch(req).then(function (res) {
+        if (res.ok) {
+          caches.open(APP_SHELL_CACHE).then(function (cache) { cache.put(req, res.clone()); });
+        }
+        return res;
+      }).catch(function () {
+        return caches.match(req, { ignoreSearch: true });
       })
     );
   }
