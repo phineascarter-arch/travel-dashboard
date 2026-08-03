@@ -4,6 +4,7 @@
     "watch": "esbuild app.js --bundle --outfile=dist/app.bundle.js --format=iife --watch"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.0",
     "motion": "^12.43.0"
   },
   "devDependencies": {

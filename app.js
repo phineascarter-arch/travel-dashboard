@@ -1,9 +1,16 @@
 import { animate, stagger } from 'motion';
+import { createClient } from '@supabase/supabase-js';
 
 (function () {
   'use strict';
 
   const STORAGE_KEY = 'rtwDashboardState_v1';
+  // Tracks only the timestamp of our own last successful cloud write — compared against the
+  // cloud row's updated_at on every login/app-open to decide whether another device has pushed
+  // something newer we don't have yet. Deliberately not part of `state` itself: it's sync
+  // bookkeeping, not trip data, and mixing it in would mean every device's copy of `state` differs
+  // by this one field even when the actual trip data is identical.
+  const SYNC_META_KEY = 'rtwDashboardSyncMeta_v1';
 
   const REGION_LABELS = { asia: '亞洲', europe: '歐洲', americas: '美洲', oceania: '大洋洲', africa: '非洲' };
   const REGION_ORDER = ['asia', 'europe', 'americas', 'oceania', 'africa'];
@@ -142,7 +149,7 @@ import { animate, stagger } from 'motion';
   let state = loadState();
   let selectedId = null;
 
-  function saveState() {
+  function saveState(opts) {
     // Safari private browsing (and a full quota, in principle) throws synchronously on
     // setItem. Uncaught, that would abort whatever the user just did mid-action — the app
     // still works fine for the rest of the session in memory, it just won't persist across
@@ -152,7 +159,101 @@ import { animate, stagger } from 'motion';
     } catch (e) {
       console.warn('Could not save state (storage unavailable or full):', e);
     }
+    // skipCloudPush: set by the cloud-pull path itself (see pullStateFromCloud) — otherwise
+    // applying a pulled copy would immediately re-queue a push of that same data right back.
+    if (!(opts && opts.skipCloudPush)) schedulePushToCloud();
   }
+
+  // ---------- cloud sync (optional — Google login syncs `state` across devices) ----------
+  // Entirely opt-in: nobody who never clicks "登入以同步" is affected by any of this, the app
+  // behaves exactly as it did before (localStorage-only). One row per signed-in user in Supabase
+  // (see backend-setup.sql), holding a full copy of `state` as JSON — not a normalized schema,
+  // since the sync unit is "the whole trip", not individual fields. Conflict handling is
+  // deliberately just last-write-wins by comparing timestamps (see pullStateFromCloud) rather
+  // than a real merge — reasonable for one person using this from a couple of devices, not
+  // multiple people editing the same account concurrently.
+  const SUPABASE_URL = 'https://uzkxyinbzwsaelcxcybx.supabase.co';
+  const SUPABASE_ANON_KEY = 'sb_publishable_Azfhf0VIc4oHtLuDMdSX_w_Krtck5-V';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let cloudUser = null;
+  let cloudPushTimer = null;
+
+  function getSyncMeta() {
+    try { return JSON.parse(localStorage.getItem(SYNC_META_KEY)) || {}; } catch (e) { return {}; }
+  }
+  function setSyncMeta(meta) {
+    try { localStorage.setItem(SYNC_META_KEY, JSON.stringify(meta)); } catch (e) { /* non-fatal */ }
+  }
+
+  function setSyncStatus(status) {
+    const el = document.getElementById('cloudSyncStatus');
+    if (!el) return;
+    el.textContent = { 'signed-out': '', pending: '☁ 同步中…', synced: '☁ 已同步', error: '☁ 同步失敗，稍後重試' }[status] || '';
+  }
+
+  function renderSyncButton() {
+    const btn = document.getElementById('cloudSyncBtn');
+    if (!btn) return;
+    if (cloudUser) {
+      btn.textContent = '登出（' + (cloudUser.email || '已登入') + '）';
+      btn.dataset.action = 'sign-out';
+    } else {
+      btn.textContent = '☁ 登入以同步';
+      btn.dataset.action = 'sign-in';
+    }
+  }
+
+  function pushStateToCloud() {
+    if (!cloudUser) return;
+    setSyncStatus('pending');
+    supabase.from('user_state').upsert({ user_id: cloudUser.id, data: state }).select('updated_at').single()
+      .then(function (res) {
+        if (res.error) { console.warn('Cloud sync push failed:', res.error); setSyncStatus('error'); return; }
+        setSyncMeta({ lastPushedAt: res.data.updated_at });
+        setSyncStatus('synced');
+      });
+  }
+
+  // Debounced so rapid-fire edits (typing a note, dragging a route stop) don't fire one network
+  // write per keystroke — only the settled result after 2s of no further saves goes up.
+  function schedulePushToCloud() {
+    if (!cloudUser) return;
+    clearTimeout(cloudPushTimer);
+    setSyncStatus('pending');
+    cloudPushTimer = setTimeout(pushStateToCloud, 2000);
+  }
+
+  function pullStateFromCloud() {
+    if (!cloudUser) return Promise.resolve();
+    setSyncStatus('pending');
+    return supabase.from('user_state').select('data, updated_at').eq('user_id', cloudUser.id).maybeSingle()
+      .then(function (res) {
+        if (res.error) { console.warn('Cloud sync pull failed:', res.error); setSyncStatus('error'); return; }
+        if (!res.data) {
+          // Nothing under this account yet (first time this Google account has synced) — treat
+          // whatever's already on this device as the seed and push it up.
+          return pushStateToCloud();
+        }
+        const meta = getSyncMeta();
+        const cloudIsNewer = !meta.lastPushedAt || new Date(res.data.updated_at) > new Date(meta.lastPushedAt);
+        if (cloudIsNewer) {
+          state = mergeState(defaultState(), res.data.data);
+          state.route = migrateRoute(state.route);
+          saveState({ skipCloudPush: true });
+          setSyncMeta({ lastPushedAt: res.data.updated_at });
+          renderAll();
+        }
+        setSyncStatus('synced');
+      });
+  }
+
+  supabase.auth.onAuthStateChange(function (event, session) {
+    cloudUser = session ? session.user : null;
+    renderSyncButton();
+    if (cloudUser) pullStateFromCloud();
+    else setSyncStatus('signed-out');
+  });
 
   function newStopId() {
     return 'stop_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -1542,6 +1643,14 @@ import { animate, stagger } from 'motion';
   ['searchInput', 'regionFilter', 'visaFilter', 'statusFilter', 'safetyFilter', 'heritageFilter', 'vaccineFilter'].forEach(function (id) {
     document.getElementById(id).addEventListener('input', onFiltersChanged);
     document.getElementById(id).addEventListener('change', onFiltersChanged);
+  });
+
+  document.getElementById('cloudSyncBtn').addEventListener('click', function () {
+    if (cloudUser) {
+      supabase.auth.signOut();
+    } else {
+      supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.href } });
+    }
   });
 
   // ---------- export / import ----------
