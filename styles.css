@@ -844,8 +844,9 @@ a { color: var(--gold-bright); }
   border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px;
   background: var(--bg-inset);
 }
-.saved-map-item a { color: var(--c-eta); font-family: var(--mono); font-size: 0.92rem; text-decoration: none; word-break: break-word; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
-.saved-map-item a:hover { text-decoration: underline; }
+.saved-map-item a { color: var(--c-eta); font-family: var(--mono); font-size: 0.92rem; word-break: break-word; text-decoration: none; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.saved-map-item .saved-map-item-label { text-decoration: none; }
+.saved-map-item a:hover .saved-map-item-label { text-decoration: underline; }
 .saved-map-item .map-remove {
   border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; flex: none; line-height: 1;
 }
@@ -855,6 +856,7 @@ a { color: var(--gold-bright); }
   display: inline-block; padding: 1px 7px; border-radius: 3px;
   font-size: 0.74rem; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap;
   border: 1px solid currentColor; background: rgba(255,255,255,0.03);
+  text-decoration: none;
 }
 .map-category-badge.cat-lodging { color: var(--c-evisa); }
 .map-category-badge.cat-food { color: var(--c-voa); }

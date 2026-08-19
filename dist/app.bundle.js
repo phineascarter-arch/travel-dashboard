@@ -26404,7 +26404,7 @@ ${suffix}`;
           const citiesHtml = cityGroups.length ? cityGroups.map(function(g) {
             const mapsHtml = g.maps.map(function(m) {
               const cat = mapCategoryInfo(m.category);
-              return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer"><span class="map-category-badge cat-' + cat.id + '">' + cat.icon + " " + escapeHtml(cat.label) + "</span> " + escapeHtml(m.label) + '</a><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></li>';
+              return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer"><span class="map-category-badge cat-' + cat.id + '">' + cat.icon + " " + escapeHtml(cat.label) + '</span><span class="saved-map-item-label">' + escapeHtml(m.label) + '</span></a><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></li>';
             }).join("");
             return '<div class="saved-map-city"><h5 class="saved-map-city-name">\u{1F4CD} ' + escapeHtml(g.cityName) + '</h5><ul class="saved-map-list">' + mapsHtml + "</ul></div>";
           }).join("") : '<div class="empty-state-small">\u5C1A\u672A\u65B0\u589E</div>';

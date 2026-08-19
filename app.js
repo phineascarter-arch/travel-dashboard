@@ -1444,8 +1444,8 @@ import { createClient } from '@supabase/supabase-js';
                 const cat = mapCategoryInfo(m.category);
                 return '<li class="saved-map-item">' +
                   '<a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">' +
-                    '<span class="map-category-badge cat-' + cat.id + '">' + cat.icon + ' ' + escapeHtml(cat.label) + '</span> ' +
-                    escapeHtml(m.label) +
+                    '<span class="map-category-badge cat-' + cat.id + '">' + cat.icon + ' ' + escapeHtml(cat.label) + '</span>' +
+                    '<span class="saved-map-item-label">' + escapeHtml(m.label) + '</span>' +
                   '</a>' +
                   '<button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="移除">✕</button>' +
                 '</li>';
