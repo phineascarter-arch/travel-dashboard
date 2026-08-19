@@ -844,7 +844,7 @@ a { color: var(--gold-bright); }
   border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px;
   background: var(--bg-inset);
 }
-.saved-map-item a { color: var(--c-eta); font-family: var(--mono); font-size: 0.92rem; word-break: break-word; text-decoration: none; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.saved-map-item a { color: var(--gold-bright); font-family: var(--mono); font-size: 0.92rem; word-break: break-word; text-decoration: none; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .saved-map-item .saved-map-item-label { text-decoration: none; }
 .saved-map-item a:hover .saved-map-item-label { text-decoration: underline; }
 .saved-map-item .map-remove {
