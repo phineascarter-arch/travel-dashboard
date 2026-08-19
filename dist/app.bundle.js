@@ -25575,6 +25575,19 @@ ${suffix}`;
       saveState();
       renderRoute();
     }
+    const MAP_CATEGORIES = [
+      { id: "lodging", label: "\u4F4F\u5BBF", icon: "\u{1F3E8}" },
+      { id: "food", label: "\u9910\u5EF3", icon: "\u{1F35C}" },
+      { id: "sight", label: "\u666F\u9EDE", icon: "\u{1F4F7}" },
+      { id: "gas", label: "\u52A0\u6CB9\u7AD9", icon: "\u26FD" },
+      { id: "transport", label: "\u4EA4\u901A", icon: "\u{1F689}" },
+      { id: "other", label: "\u5176\u4ED6", icon: "\u{1F4CC}" }
+    ];
+    function mapCategoryInfo(id) {
+      return MAP_CATEGORIES.filter(function(c) {
+        return c.id === id;
+      })[0] || MAP_CATEGORIES[MAP_CATEGORIES.length - 1];
+    }
     function getSavedMapCities(countryId) {
       return state.savedMaps[countryId] || [];
     }
@@ -25594,12 +25607,13 @@ ${suffix}`;
       state.savedMaps[countryId].push(group);
       return group;
     }
-    function addSavedMap(countryId, cityName, label, url) {
+    function addSavedMap(countryId, cityName, category, label, url) {
       const trimmedUrl = url.trim();
       if (!trimmedUrl) return;
       const group = getOrCreateSavedMapCity(countryId, cityName);
       group.maps.push({
         id: "map_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        category: mapCategoryInfo(category).id,
         label: label.trim() || "\u672A\u547D\u540D\u9023\u7D50",
         url: normalizeMapUrl(trimmedUrl)
       });
@@ -26382,15 +26396,19 @@ ${suffix}`;
       if (!countries.length) {
         listEl.innerHTML = query ? '<div class="empty-state">\u627E\u4E0D\u5230\u7B26\u5408\u7684\u570B\u5BB6</div>' : '<div class="empty-state">\u9084\u6C92\u6709\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u4E0A\u9762\u641C\u5C0B\u570B\u5BB6\u5F8C\u5C31\u53EF\u4EE5\u65B0\u589E\u3002</div>';
       } else {
+        const categoryOptionsHtml = MAP_CATEGORIES.map(function(cat) {
+          return '<option value="' + cat.id + '">' + cat.icon + " " + cat.label + "</option>";
+        }).join("");
         listEl.innerHTML = countries.map(function(c) {
           const cityGroups = getSavedMapCities(c.id);
           const citiesHtml = cityGroups.length ? cityGroups.map(function(g) {
             const mapsHtml = g.maps.map(function(m) {
-              return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">\u{1F517} ' + escapeHtml(m.label) + '</a><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></li>';
+              const cat = mapCategoryInfo(m.category);
+              return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer"><span class="map-category-badge cat-' + cat.id + '">' + cat.icon + " " + escapeHtml(cat.label) + "</span> " + escapeHtml(m.label) + '</a><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></li>';
             }).join("");
             return '<div class="saved-map-city"><h5 class="saved-map-city-name">\u{1F4CD} ' + escapeHtml(g.cityName) + '</h5><ul class="saved-map-list">' + mapsHtml + "</ul></div>";
           }).join("") : '<div class="empty-state-small">\u5C1A\u672A\u65B0\u589E</div>';
-          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + flagImg(c.id) + escapeHtml(c.name) + "</h4>" + citiesHtml + '<div class="saved-map-add-row"><input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="\u57CE\u5E02\uFF08\u4F8B\u5982\uFF1A\u66FC\u8C37\uFF09"><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u4F4F\u5BBF\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button></div></div>';
+          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + flagImg(c.id) + escapeHtml(c.name) + "</h4>" + citiesHtml + '<div class="saved-map-add-row"><input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="\u57CE\u5E02\uFF08\u4F8B\u5982\uFF1A\u66FC\u8C37\uFF09"><select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml + '</select><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u6CB3\u666F\u98EF\u5E97\uFF0C\u53EF\u7559\u7A7A\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button></div></div>';
         }).join("");
       }
       const savedCountryCount = Object.keys(state.savedMaps).length;
@@ -26398,10 +26416,11 @@ ${suffix}`;
     }
     function addMapFromInputs(countryId) {
       const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
+      const categoryInput = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
       const labelInput = document.querySelector('.map-label-input[data-country="' + countryId + '"]');
       const urlInput = document.querySelector('.map-url-input[data-country="' + countryId + '"]');
       if (!urlInput || !urlInput.value.trim()) return;
-      addSavedMap(countryId, cityInput ? cityInput.value : "", labelInput.value, urlInput.value);
+      addSavedMap(countryId, cityInput ? cityInput.value : "", categoryInput ? categoryInput.value : "", labelInput.value, urlInput.value);
     }
     document.getElementById("mapsSearchInput").addEventListener("input", renderMapsTab);
     document.getElementById("mapsList").addEventListener("click", function(e) {
@@ -26415,7 +26434,7 @@ ${suffix}`;
     });
     document.getElementById("mapsList").addEventListener("keydown", function(e) {
       if (e.key !== "Enter") return;
-      const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"], [data-field="mapCity"]');
+      const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"], [data-field="mapCity"], [data-field="mapCategory"]');
       if (!input) return;
       e.preventDefault();
       addMapFromInputs(input.getAttribute("data-country"));

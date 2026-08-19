@@ -844,21 +844,36 @@ a { color: var(--gold-bright); }
   border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px;
   background: var(--bg-inset);
 }
-.saved-map-item a { color: var(--c-eta); font-family: var(--mono); font-size: 0.92rem; text-decoration: none; word-break: break-word; }
+.saved-map-item a { color: var(--c-eta); font-family: var(--mono); font-size: 0.92rem; text-decoration: none; word-break: break-word; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .saved-map-item a:hover { text-decoration: underline; }
 .saved-map-item .map-remove {
   border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; flex: none; line-height: 1;
 }
 .saved-map-item .map-remove:hover { color: var(--c-restricted); }
+
+.map-category-badge {
+  display: inline-block; padding: 1px 7px; border-radius: 3px;
+  font-size: 0.74rem; font-weight: 700; letter-spacing: 0.3px; white-space: nowrap;
+  border: 1px solid currentColor; background: rgba(255,255,255,0.03);
+}
+.map-category-badge.cat-lodging { color: var(--c-evisa); }
+.map-category-badge.cat-food { color: var(--c-voa); }
+.map-category-badge.cat-sight { color: var(--c-free); }
+.map-category-badge.cat-gas { color: var(--gold); }
+.map-category-badge.cat-transport { color: var(--c-eta); }
+.map-category-badge.cat-other { color: var(--text-dim); }
+
 .saved-map-add-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .saved-map-add-row .map-city-input { flex: 1 1 110px; min-width: 0; }
+.saved-map-add-row .map-category-input { flex: 1 1 110px; min-width: 0; }
 .saved-map-add-row .map-label-input { flex: 1 1 140px; min-width: 0; }
 .saved-map-add-row .map-url-input { flex: 2 1 220px; min-width: 0; }
-.saved-map-add-row input {
+.saved-map-add-row input, .saved-map-add-row select {
   padding: 6px 8px; border: 1px dashed var(--border); border-radius: 4px;
-  background: transparent; color: var(--text-dim); font-family: var(--mono); font-size: 0.88rem;
+  background: var(--bg-input); color: var(--text-dim); font-family: var(--mono); font-size: 0.88rem;
 }
-.saved-map-add-row input:focus { outline: 1px solid var(--gold); color: var(--text); }
+.saved-map-add-row input:focus, .saved-map-add-row select:focus { outline: 1px solid var(--gold); color: var(--text); }
+.saved-map-add-row select { color: var(--text); }
 
 /* ---------- modal ---------- */
 .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(2, 4, 8, 0.75); align-items: center; justify-content: center; z-index: 50; }

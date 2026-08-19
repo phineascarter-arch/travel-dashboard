@@ -450,8 +450,20 @@ import { createClient } from '@supabase/supabase-js';
   // ---------- saved Google Maps links (per country, keyed by country id — not by route stop,
   // since a "My Maps" a user built while researching a country stays relevant across re-visits).
   // Grouped by city name within a country: state.savedMaps[countryId] = [{ id, cityName, maps:
-  // [{id, label, url}] }] — a city group is created implicitly the first time a link is added
-  // tagged with that city name, same pattern as the route panel's own city list. ----------
+  // [{id, category, label, url}] }] — a city group is created implicitly the first time a link
+  // is added tagged with that city name, same pattern as the route panel's own city list. ----------
+  const MAP_CATEGORIES = [
+    { id: 'lodging', label: '住宿', icon: '🏨' },
+    { id: 'food', label: '餐廳', icon: '🍜' },
+    { id: 'sight', label: '景點', icon: '📷' },
+    { id: 'gas', label: '加油站', icon: '⛽' },
+    { id: 'transport', label: '交通', icon: '🚉' },
+    { id: 'other', label: '其他', icon: '📌' },
+  ];
+  function mapCategoryInfo(id) {
+    return MAP_CATEGORIES.filter(function (c) { return c.id === id; })[0] || MAP_CATEGORIES[MAP_CATEGORIES.length - 1];
+  }
+
   function getSavedMapCities(countryId) {
     return state.savedMaps[countryId] || [];
   }
@@ -477,12 +489,13 @@ import { createClient } from '@supabase/supabase-js';
     return group;
   }
 
-  function addSavedMap(countryId, cityName, label, url) {
+  function addSavedMap(countryId, cityName, category, label, url) {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) return;
     const group = getOrCreateSavedMapCity(countryId, cityName);
     group.maps.push({
       id: 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      category: mapCategoryInfo(category).id,
       label: label.trim() || '未命名連結',
       url: normalizeMapUrl(trimmedUrl),
     });
@@ -1420,13 +1433,20 @@ import { createClient } from '@supabase/supabase-js';
         ? '<div class="empty-state">找不到符合的國家</div>'
         : '<div class="empty-state">還沒有收藏任何地圖連結，上面搜尋國家後就可以新增。</div>';
     } else {
+      const categoryOptionsHtml = MAP_CATEGORIES.map(function (cat) {
+        return '<option value="' + cat.id + '">' + cat.icon + ' ' + cat.label + '</option>';
+      }).join('');
       listEl.innerHTML = countries.map(function (c) {
         const cityGroups = getSavedMapCities(c.id);
         const citiesHtml = cityGroups.length
           ? cityGroups.map(function (g) {
               const mapsHtml = g.maps.map(function (m) {
+                const cat = mapCategoryInfo(m.category);
                 return '<li class="saved-map-item">' +
-                  '<a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">🔗 ' + escapeHtml(m.label) + '</a>' +
+                  '<a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">' +
+                    '<span class="map-category-badge cat-' + cat.id + '">' + cat.icon + ' ' + escapeHtml(cat.label) + '</span> ' +
+                    escapeHtml(m.label) +
+                  '</a>' +
                   '<button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="移除">✕</button>' +
                 '</li>';
               }).join('');
@@ -1444,7 +1464,8 @@ import { createClient } from '@supabase/supabase-js';
             citiesHtml +
             '<div class="saved-map-add-row">' +
               '<input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="城市（例如：曼谷）">' +
-              '<input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="命名（例如：住宿）">' +
+              '<select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml + '</select>' +
+              '<input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="命名（例如：河景飯店，可留空）">' +
               '<input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="貼上 Google 地圖連結">' +
               '<button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ 新增</button>' +
             '</div>' +
@@ -1459,10 +1480,11 @@ import { createClient } from '@supabase/supabase-js';
 
   function addMapFromInputs(countryId) {
     const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
+    const categoryInput = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
     const labelInput = document.querySelector('.map-label-input[data-country="' + countryId + '"]');
     const urlInput = document.querySelector('.map-url-input[data-country="' + countryId + '"]');
     if (!urlInput || !urlInput.value.trim()) return;
-    addSavedMap(countryId, cityInput ? cityInput.value : '', labelInput.value, urlInput.value);
+    addSavedMap(countryId, cityInput ? cityInput.value : '', categoryInput ? categoryInput.value : '', labelInput.value, urlInput.value);
   }
 
   document.getElementById('mapsSearchInput').addEventListener('input', renderMapsTab);
@@ -1477,7 +1499,7 @@ import { createClient } from '@supabase/supabase-js';
   });
   document.getElementById('mapsList').addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
-    const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"], [data-field="mapCity"]');
+    const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"], [data-field="mapCity"], [data-field="mapCategory"]');
     if (!input) return;
     e.preventDefault();
     addMapFromInputs(input.getAttribute('data-country'));
