@@ -515,10 +515,10 @@ import { createClient } from '@supabase/supabase-js';
     renderMapsTab();
   }
 
-  // ---------- exporting the saved-maps collection to Google 我的地圖 (CSV) / BatchGeo (TSV) ----------
+  // ---------- exporting the saved-maps collection to Google 我的地圖 (CSV) ----------
   // Google's "My Maps" has no public write API — there's no way to programmatically create a map
-  // in the user's account, so both export paths still end with the user manually pasting/uploading
-  // into someone else's site. This is just about minimizing that friction as much as a static page can.
+  // in the user's account, so this still ends with the user manually uploading the CSV into
+  // My Maps' own import flow. This is just about minimizing that friction as much as a static page can.
   //
   // A pasted Google Maps URL only contains recoverable coordinates when it's the long/expanded form
   // (…/@lat,lng,zoom… or the …!3d lat !4d lng… pin-exact pair some place URLs carry, or a bare
@@ -570,18 +570,6 @@ import { createClient } from '@supabase/supabase-js';
       ].join(','));
     });
     return lines.join('\r\n');
-  }
-
-  // Tab-separated, English headers: this is pasted straight into BatchGeo's own textarea, which
-  // guesses column meaning from the header text — English headers match its own example table and
-  // are more reliably auto-detected than the Chinese headers used in the Google My Maps CSV above.
-  function buildBatchGeoTsv(rows) {
-    const header = ['Name', 'City', 'Country', 'Group', 'Latitude', 'Longitude', 'URL'];
-    const lines = [header.join('\t')];
-    rows.forEach(function (r) {
-      lines.push([r.label, r.city, r.country, r.category, r.lat, r.lng, r.url].join('\t'));
-    });
-    return lines.join('\n');
   }
 
   function downloadTextFile(filename, text, mime) {
@@ -1597,27 +1585,6 @@ import { createClient } from '@supabase/supabase-js';
     downloadTextFile('google-maps-collection.csv', buildGoogleMyMapsCsv(rows), 'text/csv');
     window.open('https://www.google.com/maps/d/', '_blank', 'noopener,noreferrer');
     setMapsExportNote('已下載 CSV（' + rows.length + ' 筆），到剛開啟的「我的地圖」分頁：新增地圖 → 匯入 → 選這份檔案。');
-  });
-
-  document.getElementById('exportMapsBatchGeoBtn').addEventListener('click', function () {
-    const rows = flattenSavedMapsForExport();
-    if (!rows.length) { setMapsExportNote('尚未收藏任何地圖連結，沒有東西可以匯出。'); return; }
-    const tsv = buildBatchGeoTsv(rows);
-    const openBatchGeo = function () { window.open('https://batchgeo.com/', '_blank', 'noopener,noreferrer'); };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(tsv).then(function () {
-        setMapsExportNote('已複製 ' + rows.length + ' 筆到剪貼簿，到剛開啟的 BatchGeo 分頁貼上（Ctrl+V）再按「製作地圖」。');
-        openBatchGeo();
-      }).catch(function () {
-        downloadTextFile('batchgeo-collection.tsv', tsv, 'text/tab-separated-values');
-        setMapsExportNote('剪貼簿複製失敗，已改成下載檔案，開啟後手動複製貼到 BatchGeo。');
-        openBatchGeo();
-      });
-    } else {
-      downloadTextFile('batchgeo-collection.tsv', tsv, 'text/tab-separated-values');
-      setMapsExportNote('這個瀏覽器不支援自動複製，已改成下載檔案，開啟後手動複製貼到 BatchGeo。');
-      openBatchGeo();
-    }
   });
 
   function renderAll() {
