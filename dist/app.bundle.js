@@ -25637,6 +25637,84 @@ ${suffix}`;
       saveState();
       renderMapsTab();
     }
+    function extractLatLngFromMapUrl(url) {
+      let m = url.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+      if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+      m = url.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:,|$)/);
+      if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+      m = url.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:&|$)/);
+      if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+      return null;
+    }
+    function flattenSavedMapsForExport() {
+      const rows = [];
+      Object.keys(state.savedMaps).forEach(function(countryId) {
+        const country = findCountry(countryId);
+        if (!country) return;
+        state.savedMaps[countryId].forEach(function(group) {
+          group.maps.forEach(function(m) {
+            const cat = mapCategoryInfo(m.category);
+            const coords = extractLatLngFromMapUrl(m.url);
+            rows.push({
+              country: country.name,
+              city: group.cityName,
+              category: cat.label,
+              label: m.label,
+              url: m.url,
+              lat: coords ? coords.lat : "",
+              lng: coords ? coords.lng : ""
+            });
+          });
+        });
+      });
+      return rows;
+    }
+    function csvField(v) {
+      const s = String(v == null ? "" : v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }
+    function buildGoogleMyMapsCsv(rows) {
+      const header = ["\u570B\u5BB6", "\u57CE\u5E02", "\u5206\u985E", "\u540D\u7A31", "\u5730\u9EDE", "\u7DEF\u5EA6", "\u7D93\u5EA6", "\u539F\u59CB\u9023\u7D50"];
+      const lines = [header.join(",")];
+      rows.forEach(function(r) {
+        lines.push([
+          csvField(r.country),
+          csvField(r.city),
+          csvField(r.category),
+          csvField(r.label),
+          csvField(r.city + ", " + r.country),
+          csvField(r.lat),
+          csvField(r.lng),
+          csvField(r.url)
+        ].join(","));
+      });
+      return lines.join("\r\n");
+    }
+    function buildBatchGeoTsv(rows) {
+      const header = ["Name", "City", "Country", "Group", "Latitude", "Longitude", "URL"];
+      const lines = [header.join("	")];
+      rows.forEach(function(r) {
+        lines.push([r.label, r.city, r.country, r.category, r.lat, r.lng, r.url].join("	"));
+      });
+      return lines.join("\n");
+    }
+    function downloadTextFile(filename, text, mime) {
+      const blob = new Blob(["\uFEFF" + text], { type: mime + ";charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(function() {
+        URL.revokeObjectURL(url);
+      }, 1e3);
+    }
+    function setMapsExportNote(text) {
+      const el = document.getElementById("mapsExportNote");
+      if (el) el.textContent = text;
+    }
     const geocodeQueue = [];
     let geocodeQueueBusy = false;
     const geocodeAttempted = /* @__PURE__ */ new Set();
@@ -26438,6 +26516,41 @@ ${suffix}`;
       if (!input) return;
       e.preventDefault();
       addMapFromInputs(input.getAttribute("data-country"));
+    });
+    document.getElementById("exportMapsCsvBtn").addEventListener("click", function() {
+      const rows = flattenSavedMapsForExport();
+      if (!rows.length) {
+        setMapsExportNote("\u5C1A\u672A\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u6C92\u6709\u6771\u897F\u53EF\u4EE5\u532F\u51FA\u3002");
+        return;
+      }
+      downloadTextFile("google-maps-collection.csv", buildGoogleMyMapsCsv(rows), "text/csv");
+      window.open("https://www.google.com/maps/d/", "_blank", "noopener,noreferrer");
+      setMapsExportNote("\u5DF2\u4E0B\u8F09 CSV\uFF08" + rows.length + " \u7B46\uFF09\uFF0C\u5230\u525B\u958B\u555F\u7684\u300C\u6211\u7684\u5730\u5716\u300D\u5206\u9801\uFF1A\u65B0\u589E\u5730\u5716 \u2192 \u532F\u5165 \u2192 \u9078\u9019\u4EFD\u6A94\u6848\u3002");
+    });
+    document.getElementById("exportMapsBatchGeoBtn").addEventListener("click", function() {
+      const rows = flattenSavedMapsForExport();
+      if (!rows.length) {
+        setMapsExportNote("\u5C1A\u672A\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u6C92\u6709\u6771\u897F\u53EF\u4EE5\u532F\u51FA\u3002");
+        return;
+      }
+      const tsv = buildBatchGeoTsv(rows);
+      const openBatchGeo = function() {
+        window.open("https://batchgeo.com/", "_blank", "noopener,noreferrer");
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(tsv).then(function() {
+          setMapsExportNote("\u5DF2\u8907\u88FD " + rows.length + " \u7B46\u5230\u526A\u8CBC\u7C3F\uFF0C\u5230\u525B\u958B\u555F\u7684 BatchGeo \u5206\u9801\u8CBC\u4E0A\uFF08Ctrl+V\uFF09\u518D\u6309\u300C\u88FD\u4F5C\u5730\u5716\u300D\u3002");
+          openBatchGeo();
+        }).catch(function() {
+          downloadTextFile("batchgeo-collection.tsv", tsv, "text/tab-separated-values");
+          setMapsExportNote("\u526A\u8CBC\u7C3F\u8907\u88FD\u5931\u6557\uFF0C\u5DF2\u6539\u6210\u4E0B\u8F09\u6A94\u6848\uFF0C\u958B\u555F\u5F8C\u624B\u52D5\u8907\u88FD\u8CBC\u5230 BatchGeo\u3002");
+          openBatchGeo();
+        });
+      } else {
+        downloadTextFile("batchgeo-collection.tsv", tsv, "text/tab-separated-values");
+        setMapsExportNote("\u9019\u500B\u700F\u89BD\u5668\u4E0D\u652F\u63F4\u81EA\u52D5\u8907\u88FD\uFF0C\u5DF2\u6539\u6210\u4E0B\u8F09\u6A94\u6848\uFF0C\u958B\u555F\u5F8C\u624B\u52D5\u8907\u88FD\u8CBC\u5230 BatchGeo\u3002");
+        openBatchGeo();
+      }
     });
     function renderAll() {
       renderStats();

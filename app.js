@@ -515,6 +515,92 @@ import { createClient } from '@supabase/supabase-js';
     renderMapsTab();
   }
 
+  // ---------- exporting the saved-maps collection to Google 我的地圖 (CSV) / BatchGeo (TSV) ----------
+  // Google's "My Maps" has no public write API — there's no way to programmatically create a map
+  // in the user's account, so both export paths still end with the user manually pasting/uploading
+  // into someone else's site. This is just about minimizing that friction as much as a static page can.
+  //
+  // A pasted Google Maps URL only contains recoverable coordinates when it's the long/expanded form
+  // (…/@lat,lng,zoom… or the …!3d lat !4d lng… pin-exact pair some place URLs carry, or a bare
+  // ?q=lat,lng). Shortened share links (maps.app.goo.gl/…) redirect server-side with no coordinates
+  // in the URL itself, and resolving that redirect from a static site would need a cross-origin
+  // fetch the browser won't allow — so for those, city-level geocoding is the honest fallback.
+  function extractLatLngFromMapUrl(url) {
+    let m = url.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
+    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+    m = url.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:,|$)/);
+    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+    m = url.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)(?:&|$)/);
+    if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
+    return null;
+  }
+
+  function flattenSavedMapsForExport() {
+    const rows = [];
+    Object.keys(state.savedMaps).forEach(function (countryId) {
+      const country = findCountry(countryId);
+      if (!country) return;
+      state.savedMaps[countryId].forEach(function (group) {
+        group.maps.forEach(function (m) {
+          const cat = mapCategoryInfo(m.category);
+          const coords = extractLatLngFromMapUrl(m.url);
+          rows.push({
+            country: country.name, city: group.cityName, category: cat.label,
+            label: m.label, url: m.url,
+            lat: coords ? coords.lat : '', lng: coords ? coords.lng : '',
+          });
+        });
+      });
+    });
+    return rows;
+  }
+
+  function csvField(v) {
+    const s = String(v == null ? '' : v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function buildGoogleMyMapsCsv(rows) {
+    const header = ['國家', '城市', '分類', '名稱', '地點', '緯度', '經度', '原始連結'];
+    const lines = [header.join(',')];
+    rows.forEach(function (r) {
+      lines.push([
+        csvField(r.country), csvField(r.city), csvField(r.category), csvField(r.label),
+        csvField(r.city + ', ' + r.country), csvField(r.lat), csvField(r.lng), csvField(r.url),
+      ].join(','));
+    });
+    return lines.join('\r\n');
+  }
+
+  // Tab-separated, English headers: this is pasted straight into BatchGeo's own textarea, which
+  // guesses column meaning from the header text — English headers match its own example table and
+  // are more reliably auto-detected than the Chinese headers used in the Google My Maps CSV above.
+  function buildBatchGeoTsv(rows) {
+    const header = ['Name', 'City', 'Country', 'Group', 'Latitude', 'Longitude', 'URL'];
+    const lines = [header.join('\t')];
+    rows.forEach(function (r) {
+      lines.push([r.label, r.city, r.country, r.category, r.lat, r.lng, r.url].join('\t'));
+    });
+    return lines.join('\n');
+  }
+
+  function downloadTextFile(filename, text, mime) {
+    const blob = new Blob(['﻿' + text], { type: mime + ';charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+  }
+
+  function setMapsExportNote(text) {
+    const el = document.getElementById('mapsExportNote');
+    if (el) el.textContent = text;
+  }
+
   // ---------- city geocoding (OpenStreetMap Nominatim — free, no key, ~1 req/sec limit) ----------
   // City names typed into "城市清單" are free text with no coordinates, so leg distances fall
   // back to country-centroid math. This resolves each city to lat/lng in the background so
@@ -1503,6 +1589,35 @@ import { createClient } from '@supabase/supabase-js';
     if (!input) return;
     e.preventDefault();
     addMapFromInputs(input.getAttribute('data-country'));
+  });
+
+  document.getElementById('exportMapsCsvBtn').addEventListener('click', function () {
+    const rows = flattenSavedMapsForExport();
+    if (!rows.length) { setMapsExportNote('尚未收藏任何地圖連結，沒有東西可以匯出。'); return; }
+    downloadTextFile('google-maps-collection.csv', buildGoogleMyMapsCsv(rows), 'text/csv');
+    window.open('https://www.google.com/maps/d/', '_blank', 'noopener,noreferrer');
+    setMapsExportNote('已下載 CSV（' + rows.length + ' 筆），到剛開啟的「我的地圖」分頁：新增地圖 → 匯入 → 選這份檔案。');
+  });
+
+  document.getElementById('exportMapsBatchGeoBtn').addEventListener('click', function () {
+    const rows = flattenSavedMapsForExport();
+    if (!rows.length) { setMapsExportNote('尚未收藏任何地圖連結，沒有東西可以匯出。'); return; }
+    const tsv = buildBatchGeoTsv(rows);
+    const openBatchGeo = function () { window.open('https://batchgeo.com/', '_blank', 'noopener,noreferrer'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(tsv).then(function () {
+        setMapsExportNote('已複製 ' + rows.length + ' 筆到剪貼簿，到剛開啟的 BatchGeo 分頁貼上（Ctrl+V）再按「製作地圖」。');
+        openBatchGeo();
+      }).catch(function () {
+        downloadTextFile('batchgeo-collection.tsv', tsv, 'text/tab-separated-values');
+        setMapsExportNote('剪貼簿複製失敗，已改成下載檔案，開啟後手動複製貼到 BatchGeo。');
+        openBatchGeo();
+      });
+    } else {
+      downloadTextFile('batchgeo-collection.tsv', tsv, 'text/tab-separated-values');
+      setMapsExportNote('這個瀏覽器不支援自動複製，已改成下載檔案，開啟後手動複製貼到 BatchGeo。');
+      openBatchGeo();
+    }
   });
 
   function renderAll() {
