@@ -8,7 +8,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <meta name="theme-color" content="#05070d">
-<link rel="stylesheet" href="styles.css?v=20260820032604">
+<link rel="stylesheet" href="styles.css?v=20260820033634">
 <style id="sharePrintStyle">
   .share-doc { max-width: 820px; margin: 0 auto; background: #fff; color: #1a1a1a; font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", Arial, sans-serif; padding: 32px 36px; line-height: 1.55; border-radius: 8px; }
   .share-doc h1 { font-size: 1.4rem; margin: 0 0 4px; color: #14213d; }
@@ -200,9 +200,12 @@
       <h2><span class="bracket">[</span> 各國 Google 地圖收藏 <span class="bracket">]</span></h2>
       <span class="maps-summary" id="mapsSummary"></span>
     </div>
-    <p class="route-hint">貼上 Google 地圖的分享連結（例如你自己整理的 My Maps、或某個地點的連結），可以幫每個國家存好幾筆、自己命名（住宿、景點、餐廳…）。沒有搜尋的話只會列出已經存過連結的國家。</p>
+    <p class="route-hint">貼上 Google 地圖的分享連結（例如你自己整理的 My Maps、或某個地點的連結），可以幫每個國家存好幾筆、自己命名（住宿、景點、餐廳…）。沒有搜尋的話只會列出已經存過連結的國家。國家/城市前面的勾選框可以決定匯出範圍。</p>
     <div class="maps-export-row">
       <button type="button" class="btn btn-small" id="exportMapsCsvBtn">📥 匯出 CSV（Google 我的地圖）</button>
+      <button type="button" class="btn btn-small btn-ghost" id="mapsExportSelectAllBtn">全選</button>
+      <button type="button" class="btn btn-small btn-ghost" id="mapsExportSelectNoneBtn">全部取消</button>
+      <span class="maps-export-count" id="mapsExportCount"></span>
       <span class="maps-export-note" id="mapsExportNote"></span>
     </div>
     <input type="search" id="mapsSearchInput" placeholder="&gt; 搜尋國家，找到後可以新增地圖連結…" autocomplete="off">
@@ -381,9 +384,9 @@
   </div>
 </div>
 
-<script src="data/seed-countries.js?v=20260820032604"></script>
-<script src="data/world-map.js?v=20260820032604"></script>
-<script src="dist/app.bundle.js?v=20260820032604"></script>
+<script src="data/seed-countries.js?v=20260820033634"></script>
+<script src="data/world-map.js?v=20260820033634"></script>
+<script src="dist/app.bundle.js?v=20260820033634"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {

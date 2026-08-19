@@ -464,6 +464,11 @@ import { createClient } from '@supabase/supabase-js';
     return MAP_CATEGORIES.filter(function (c) { return c.id === id; })[0] || MAP_CATEGORIES[MAP_CATEGORIES.length - 1];
   }
 
+  // Which saved-map <li> is currently showing its inline edit form (null = none), and which city
+  // groups are excluded from the next export — both are UI-only, in-memory, not persisted state.
+  let editingMapId = null;
+  let mapsExportExcludedCities = new Set();
+
   function getSavedMapCities(countryId) {
     return state.savedMaps[countryId] || [];
   }
@@ -515,6 +520,32 @@ import { createClient } from '@supabase/supabase-js';
     renderMapsTab();
   }
 
+  // Editing can change the city name, which means moving the link into a different (possibly
+  // brand-new) city group rather than just patching a field in place.
+  function updateSavedMap(countryId, cityGroupId, mapId, cityName, category, label, url) {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) return;
+    const groups = state.savedMaps[countryId];
+    if (!groups) return;
+    const group = groups.filter(function (g) { return g.id === cityGroupId; })[0];
+    if (!group) return;
+    const mapEntry = group.maps.filter(function (m) { return m.id === mapId; })[0];
+    if (!mapEntry) return;
+
+    mapEntry.category = mapCategoryInfo(category).id;
+    mapEntry.label = label.trim() || '未命名連結';
+    mapEntry.url = normalizeMapUrl(trimmedUrl);
+
+    const trimmedCity = cityName.trim() || '未命名城市';
+    if (trimmedCity !== group.cityName) {
+      group.maps = group.maps.filter(function (m) { return m.id !== mapId; });
+      state.savedMaps[countryId] = groups.filter(function (g) { return g.maps.length; });
+      getOrCreateSavedMapCity(countryId, trimmedCity).maps.push(mapEntry);
+    }
+    saveState();
+    renderMapsTab();
+  }
+
   // ---------- exporting the saved-maps collection to Google 我的地圖 (CSV) ----------
   // Google's "My Maps" has no public write API — there's no way to programmatically create a map
   // in the user's account, so this still ends with the user manually uploading the CSV into
@@ -545,6 +576,7 @@ import { createClient } from '@supabase/supabase-js';
           const cat = mapCategoryInfo(m.category);
           const coords = extractLatLngFromMapUrl(m.url);
           rows.push({
+            countryId: countryId, cityGroupId: group.id,
             country: country.name, city: group.cityName, category: cat.label,
             label: m.label, url: m.url,
             lat: coords ? coords.lat : '', lng: coords ? coords.lng : '',
@@ -1480,6 +1512,12 @@ import { createClient } from '@supabase/supabase-js';
   });
 
   // ---------- Google Maps collection (per country, database-wide — not scoped to "我的路線") ----------
+  function categoryOptionsHtml(selectedId) {
+    return MAP_CATEGORIES.map(function (cat) {
+      return '<option value="' + cat.id + '"' + (cat.id === selectedId ? ' selected' : '') + '>' + cat.icon + ' ' + cat.label + '</option>';
+    }).join('');
+  }
+
   function renderMapsTab() {
     const listEl = document.getElementById('mapsList');
     if (!listEl) return;
@@ -1507,26 +1545,41 @@ import { createClient } from '@supabase/supabase-js';
         ? '<div class="empty-state">找不到符合的國家</div>'
         : '<div class="empty-state">還沒有收藏任何地圖連結，上面搜尋國家後就可以新增。</div>';
     } else {
-      const categoryOptionsHtml = MAP_CATEGORIES.map(function (cat) {
-        return '<option value="' + cat.id + '">' + cat.icon + ' ' + cat.label + '</option>';
-      }).join('');
       listEl.innerHTML = countries.map(function (c) {
         const cityGroups = getSavedMapCities(c.id);
+        const countryChecked = cityGroups.length > 0 && cityGroups.every(function (g) { return !mapsExportExcludedCities.has(g.id); });
         const citiesHtml = cityGroups.length
           ? cityGroups.map(function (g) {
+              const cityChecked = !mapsExportExcludedCities.has(g.id);
               const mapsHtml = g.maps.map(function (m) {
                 const cat = mapCategoryInfo(m.category);
+                if (m.id === editingMapId) {
+                  return '<li class="saved-map-item saved-map-item-editing" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '">' +
+                    '<input type="text" class="map-edit-city" value="' + escapeHtml(g.cityName) + '" placeholder="城市">' +
+                    '<select class="map-edit-category">' + categoryOptionsHtml(cat.id) + '</select>' +
+                    '<input type="text" class="map-edit-label" value="' + escapeHtml(m.label) + '" placeholder="命名">' +
+                    '<input type="text" class="map-edit-url" value="' + escapeHtml(m.url) + '" placeholder="貼上 Google 地圖連結">' +
+                    '<button type="button" class="btn btn-small" data-action="map-edit-save">儲存</button>' +
+                    '<button type="button" class="btn btn-small btn-ghost" data-action="map-edit-cancel">取消</button>' +
+                  '</li>';
+                }
                 return '<li class="saved-map-item">' +
                   '<a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">' +
                     '<span class="map-category-badge cat-' + cat.id + '">' + cat.icon + ' ' + escapeHtml(cat.label) + '</span>' +
                     '<span class="saved-map-item-label">' + escapeHtml(m.label) + '</span>' +
                   '</a>' +
-                  '<button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="移除">✕</button>' +
+                  '<span class="saved-map-item-actions">' +
+                    '<button type="button" class="map-edit" data-action="map-edit" data-id="' + m.id + '" title="編輯">✎</button>' +
+                    '<button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="移除">✕</button>' +
+                  '</span>' +
                 '</li>';
               }).join('');
               return (
                 '<div class="saved-map-city">' +
-                  '<h5 class="saved-map-city-name">📍 ' + escapeHtml(g.cityName) + '</h5>' +
+                  '<h5 class="saved-map-city-name">' +
+                    '<label class="maps-export-check" title="匯出時是否包含這個城市"><input type="checkbox" class="export-city-check" data-country="' + c.id + '" data-city="' + g.id + '"' + (cityChecked ? ' checked' : '') + '></label>' +
+                    '📍 ' + escapeHtml(g.cityName) +
+                  '</h5>' +
                   '<ul class="saved-map-list">' + mapsHtml + '</ul>' +
                 '</div>'
               );
@@ -1534,11 +1587,14 @@ import { createClient } from '@supabase/supabase-js';
           : '<div class="empty-state-small">尚未新增</div>';
         return (
           '<div class="saved-map-group" data-country="' + c.id + '">' +
-            '<h4>' + flagImg(c.id) + escapeHtml(c.name) + '</h4>' +
+            '<h4>' +
+              (cityGroups.length ? '<label class="maps-export-check" title="匯出時是否包含這個國家"><input type="checkbox" class="export-country-check" data-country="' + c.id + '"' + (countryChecked ? ' checked' : '') + '></label>' : '') +
+              flagImg(c.id) + escapeHtml(c.name) +
+            '</h4>' +
             citiesHtml +
             '<div class="saved-map-add-row">' +
               '<input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="城市（例如：曼谷）">' +
-              '<select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml + '</select>' +
+              '<select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml() + '</select>' +
               '<input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="命名（例如：河景飯店，可留空）">' +
               '<input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="貼上 Google 地圖連結">' +
               '<button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ 新增</button>' +
@@ -1550,6 +1606,11 @@ import { createClient } from '@supabase/supabase-js';
 
     const savedCountryCount = Object.keys(state.savedMaps).length;
     document.getElementById('mapsSummary').textContent = savedCountryCount ? '已收藏 ' + savedCountryCount + ' 個國家的地圖' : '';
+
+    const allExportRows = flattenSavedMapsForExport();
+    const selectedCount = allExportRows.filter(function (r) { return !mapsExportExcludedCities.has(r.cityGroupId); }).length;
+    const countEl = document.getElementById('mapsExportCount');
+    if (countEl) countEl.textContent = allExportRows.length ? ('已選 ' + selectedCount + ' / ' + allExportRows.length + ' 筆') : '';
   }
 
   function addMapFromInputs(countryId) {
@@ -1561,6 +1622,22 @@ import { createClient } from '@supabase/supabase-js';
     addSavedMap(countryId, cityInput ? cityInput.value : '', categoryInput ? categoryInput.value : '', labelInput.value, urlInput.value);
   }
 
+  // Returns whether the edit actually saved (false when the URL field was left empty) so
+  // callers only close the edit form on success — otherwise it'd vanish silently discarding
+  // whatever the user typed, with no re-render to show why nothing happened.
+  // editingMapId must be cleared BEFORE calling updateSavedMap, not after — updateSavedMap
+  // triggers its own renderMapsTab() internally, and if editingMapId were still set at that
+  // point, that render would just redraw the (now stale-valued) edit form instead of closing it.
+  function saveMapEditFromLi(li) {
+    const urlInput = li.querySelector('.map-edit-url');
+    if (!urlInput || !urlInput.value.trim()) return false;
+    const countryId = li.getAttribute('data-country'), cityGroupId = li.getAttribute('data-city'), mapId = li.getAttribute('data-id');
+    const cityVal = li.querySelector('.map-edit-city').value, categoryVal = li.querySelector('.map-edit-category').value, labelVal = li.querySelector('.map-edit-label').value, urlVal = urlInput.value;
+    editingMapId = null;
+    updateSavedMap(countryId, cityGroupId, mapId, cityVal, categoryVal, labelVal, urlVal);
+    return true;
+  }
+
   document.getElementById('mapsSearchInput').addEventListener('input', renderMapsTab);
   document.getElementById('mapsList').addEventListener('click', function (e) {
     const removeBtn = e.target.closest('[data-action="map-remove"]');
@@ -1569,19 +1646,67 @@ import { createClient } from '@supabase/supabase-js';
       return;
     }
     const addBtn = e.target.closest('[data-action="map-add"]');
-    if (addBtn) addMapFromInputs(addBtn.getAttribute('data-country'));
+    if (addBtn) { addMapFromInputs(addBtn.getAttribute('data-country')); return; }
+    const editBtn = e.target.closest('[data-action="map-edit"]');
+    if (editBtn) { editingMapId = editBtn.getAttribute('data-id'); renderMapsTab(); return; }
+    const cancelBtn = e.target.closest('[data-action="map-edit-cancel"]');
+    if (cancelBtn) { editingMapId = null; renderMapsTab(); return; }
+    const saveBtn = e.target.closest('[data-action="map-edit-save"]');
+    if (saveBtn) { saveMapEditFromLi(saveBtn.closest('.saved-map-item-editing')); return; }
   });
   document.getElementById('mapsList').addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && e.target.closest('.saved-map-item-editing')) {
+      editingMapId = null;
+      renderMapsTab();
+      return;
+    }
     if (e.key !== 'Enter') return;
+    const editingLi = e.target.closest('.saved-map-item-editing');
+    if (editingLi && e.target.tagName !== 'SELECT') {
+      e.preventDefault();
+      saveMapEditFromLi(editingLi);
+      return;
+    }
     const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"], [data-field="mapCity"], [data-field="mapCategory"]');
     if (!input) return;
     e.preventDefault();
     addMapFromInputs(input.getAttribute('data-country'));
   });
+  document.getElementById('mapsList').addEventListener('change', function (e) {
+    const countryCheck = e.target.closest('.export-country-check');
+    if (countryCheck) {
+      const groups = getSavedMapCities(countryCheck.getAttribute('data-country'));
+      groups.forEach(function (g) {
+        if (countryCheck.checked) mapsExportExcludedCities.delete(g.id);
+        else mapsExportExcludedCities.add(g.id);
+      });
+      renderMapsTab();
+      return;
+    }
+    const cityCheck = e.target.closest('.export-city-check');
+    if (cityCheck) {
+      const cityId = cityCheck.getAttribute('data-city');
+      if (cityCheck.checked) mapsExportExcludedCities.delete(cityId);
+      else mapsExportExcludedCities.add(cityId);
+      renderMapsTab();
+    }
+  });
+  document.getElementById('mapsExportSelectAllBtn').addEventListener('click', function () {
+    mapsExportExcludedCities.clear();
+    renderMapsTab();
+  });
+  document.getElementById('mapsExportSelectNoneBtn').addEventListener('click', function () {
+    Object.keys(state.savedMaps).forEach(function (countryId) {
+      state.savedMaps[countryId].forEach(function (g) { mapsExportExcludedCities.add(g.id); });
+    });
+    renderMapsTab();
+  });
 
   document.getElementById('exportMapsCsvBtn').addEventListener('click', function () {
-    const rows = flattenSavedMapsForExport();
-    if (!rows.length) { setMapsExportNote('尚未收藏任何地圖連結，沒有東西可以匯出。'); return; }
+    const allRows = flattenSavedMapsForExport();
+    if (!allRows.length) { setMapsExportNote('尚未收藏任何地圖連結，沒有東西可以匯出。'); return; }
+    const rows = allRows.filter(function (r) { return !mapsExportExcludedCities.has(r.cityGroupId); });
+    if (!rows.length) { setMapsExportNote('目前沒有勾選任何國家或城市，先在下面勾選想匯出的範圍。'); return; }
     downloadTextFile('google-maps-collection.csv', buildGoogleMyMapsCsv(rows), 'text/csv');
     window.open('https://www.google.com/maps/d/', '_blank', 'noopener,noreferrer');
     setMapsExportNote('已下載 CSV（' + rows.length + ' 筆），到剛開啟的「我的地圖」分頁：新增地圖 → 匯入 → 選這份檔案。');

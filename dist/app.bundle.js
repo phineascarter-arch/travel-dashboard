@@ -25588,6 +25588,8 @@ ${suffix}`;
         return c.id === id;
       })[0] || MAP_CATEGORIES[MAP_CATEGORIES.length - 1];
     }
+    let editingMapId = null;
+    let mapsExportExcludedCities = /* @__PURE__ */ new Set();
     function getSavedMapCities(countryId) {
       return state.savedMaps[countryId] || [];
     }
@@ -25637,6 +25639,35 @@ ${suffix}`;
       saveState();
       renderMapsTab();
     }
+    function updateSavedMap(countryId, cityGroupId, mapId, cityName, category, label, url) {
+      const trimmedUrl = url.trim();
+      if (!trimmedUrl) return;
+      const groups = state.savedMaps[countryId];
+      if (!groups) return;
+      const group = groups.filter(function(g) {
+        return g.id === cityGroupId;
+      })[0];
+      if (!group) return;
+      const mapEntry = group.maps.filter(function(m) {
+        return m.id === mapId;
+      })[0];
+      if (!mapEntry) return;
+      mapEntry.category = mapCategoryInfo(category).id;
+      mapEntry.label = label.trim() || "\u672A\u547D\u540D\u9023\u7D50";
+      mapEntry.url = normalizeMapUrl(trimmedUrl);
+      const trimmedCity = cityName.trim() || "\u672A\u547D\u540D\u57CE\u5E02";
+      if (trimmedCity !== group.cityName) {
+        group.maps = group.maps.filter(function(m) {
+          return m.id !== mapId;
+        });
+        state.savedMaps[countryId] = groups.filter(function(g) {
+          return g.maps.length;
+        });
+        getOrCreateSavedMapCity(countryId, trimmedCity).maps.push(mapEntry);
+      }
+      saveState();
+      renderMapsTab();
+    }
     function extractLatLngFromMapUrl(url) {
       let m = url.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
       if (m) return { lat: parseFloat(m[1]), lng: parseFloat(m[2]) };
@@ -25656,6 +25687,8 @@ ${suffix}`;
             const cat = mapCategoryInfo(m.category);
             const coords = extractLatLngFromMapUrl(m.url);
             rows.push({
+              countryId,
+              cityGroupId: group.id,
               country: country.name,
               city: group.cityName,
               category: cat.label,
@@ -26444,6 +26477,11 @@ ${suffix}`;
       if (!value) return;
       addChecklistItem("country", input.getAttribute("data-country"), value);
     });
+    function categoryOptionsHtml(selectedId2) {
+      return MAP_CATEGORIES.map(function(cat) {
+        return '<option value="' + cat.id + '"' + (cat.id === selectedId2 ? " selected" : "") + ">" + cat.icon + " " + cat.label + "</option>";
+      }).join("");
+    }
     function renderMapsTab() {
       const listEl = document.getElementById("mapsList");
       if (!listEl) return;
@@ -26466,23 +26504,33 @@ ${suffix}`;
       if (!countries.length) {
         listEl.innerHTML = query ? '<div class="empty-state">\u627E\u4E0D\u5230\u7B26\u5408\u7684\u570B\u5BB6</div>' : '<div class="empty-state">\u9084\u6C92\u6709\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u4E0A\u9762\u641C\u5C0B\u570B\u5BB6\u5F8C\u5C31\u53EF\u4EE5\u65B0\u589E\u3002</div>';
       } else {
-        const categoryOptionsHtml = MAP_CATEGORIES.map(function(cat) {
-          return '<option value="' + cat.id + '">' + cat.icon + " " + cat.label + "</option>";
-        }).join("");
         listEl.innerHTML = countries.map(function(c) {
           const cityGroups = getSavedMapCities(c.id);
+          const countryChecked = cityGroups.length > 0 && cityGroups.every(function(g) {
+            return !mapsExportExcludedCities.has(g.id);
+          });
           const citiesHtml = cityGroups.length ? cityGroups.map(function(g) {
+            const cityChecked = !mapsExportExcludedCities.has(g.id);
             const mapsHtml = g.maps.map(function(m) {
               const cat = mapCategoryInfo(m.category);
-              return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer"><span class="map-category-badge cat-' + cat.id + '">' + cat.icon + " " + escapeHtml(cat.label) + '</span><span class="saved-map-item-label">' + escapeHtml(m.label) + '</span></a><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></li>';
+              if (m.id === editingMapId) {
+                return '<li class="saved-map-item saved-map-item-editing" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '"><input type="text" class="map-edit-city" value="' + escapeHtml(g.cityName) + '" placeholder="\u57CE\u5E02"><select class="map-edit-category">' + categoryOptionsHtml(cat.id) + '</select><input type="text" class="map-edit-label" value="' + escapeHtml(m.label) + '" placeholder="\u547D\u540D"><input type="text" class="map-edit-url" value="' + escapeHtml(m.url) + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small" data-action="map-edit-save">\u5132\u5B58</button><button type="button" class="btn btn-small btn-ghost" data-action="map-edit-cancel">\u53D6\u6D88</button></li>';
+              }
+              return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer"><span class="map-category-badge cat-' + cat.id + '">' + cat.icon + " " + escapeHtml(cat.label) + '</span><span class="saved-map-item-label">' + escapeHtml(m.label) + '</span></a><span class="saved-map-item-actions"><button type="button" class="map-edit" data-action="map-edit" data-id="' + m.id + '" title="\u7DE8\u8F2F">\u270E</button><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></span></li>';
             }).join("");
-            return '<div class="saved-map-city"><h5 class="saved-map-city-name">\u{1F4CD} ' + escapeHtml(g.cityName) + '</h5><ul class="saved-map-list">' + mapsHtml + "</ul></div>";
+            return '<div class="saved-map-city"><h5 class="saved-map-city-name"><label class="maps-export-check" title="\u532F\u51FA\u6642\u662F\u5426\u5305\u542B\u9019\u500B\u57CE\u5E02"><input type="checkbox" class="export-city-check" data-country="' + c.id + '" data-city="' + g.id + '"' + (cityChecked ? " checked" : "") + "></label>\u{1F4CD} " + escapeHtml(g.cityName) + '</h5><ul class="saved-map-list">' + mapsHtml + "</ul></div>";
           }).join("") : '<div class="empty-state-small">\u5C1A\u672A\u65B0\u589E</div>';
-          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + flagImg(c.id) + escapeHtml(c.name) + "</h4>" + citiesHtml + '<div class="saved-map-add-row"><input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="\u57CE\u5E02\uFF08\u4F8B\u5982\uFF1A\u66FC\u8C37\uFF09"><select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml + '</select><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u6CB3\u666F\u98EF\u5E97\uFF0C\u53EF\u7559\u7A7A\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button></div></div>';
+          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + (cityGroups.length ? '<label class="maps-export-check" title="\u532F\u51FA\u6642\u662F\u5426\u5305\u542B\u9019\u500B\u570B\u5BB6"><input type="checkbox" class="export-country-check" data-country="' + c.id + '"' + (countryChecked ? " checked" : "") + "></label>" : "") + flagImg(c.id) + escapeHtml(c.name) + "</h4>" + citiesHtml + '<div class="saved-map-add-row"><input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="\u57CE\u5E02\uFF08\u4F8B\u5982\uFF1A\u66FC\u8C37\uFF09"><select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml() + '</select><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u6CB3\u666F\u98EF\u5E97\uFF0C\u53EF\u7559\u7A7A\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button></div></div>';
         }).join("");
       }
       const savedCountryCount = Object.keys(state.savedMaps).length;
       document.getElementById("mapsSummary").textContent = savedCountryCount ? "\u5DF2\u6536\u85CF " + savedCountryCount + " \u500B\u570B\u5BB6\u7684\u5730\u5716" : "";
+      const allExportRows = flattenSavedMapsForExport();
+      const selectedCount = allExportRows.filter(function(r) {
+        return !mapsExportExcludedCities.has(r.cityGroupId);
+      }).length;
+      const countEl = document.getElementById("mapsExportCount");
+      if (countEl) countEl.textContent = allExportRows.length ? "\u5DF2\u9078 " + selectedCount + " / " + allExportRows.length + " \u7B46" : "";
     }
     function addMapFromInputs(countryId) {
       const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
@@ -26492,6 +26540,15 @@ ${suffix}`;
       if (!urlInput || !urlInput.value.trim()) return;
       addSavedMap(countryId, cityInput ? cityInput.value : "", categoryInput ? categoryInput.value : "", labelInput.value, urlInput.value);
     }
+    function saveMapEditFromLi(li) {
+      const urlInput = li.querySelector(".map-edit-url");
+      if (!urlInput || !urlInput.value.trim()) return false;
+      const countryId = li.getAttribute("data-country"), cityGroupId = li.getAttribute("data-city"), mapId = li.getAttribute("data-id");
+      const cityVal = li.querySelector(".map-edit-city").value, categoryVal = li.querySelector(".map-edit-category").value, labelVal = li.querySelector(".map-edit-label").value, urlVal = urlInput.value;
+      editingMapId = null;
+      updateSavedMap(countryId, cityGroupId, mapId, cityVal, categoryVal, labelVal, urlVal);
+      return true;
+    }
     document.getElementById("mapsSearchInput").addEventListener("input", renderMapsTab);
     document.getElementById("mapsList").addEventListener("click", function(e) {
       const removeBtn = e.target.closest('[data-action="map-remove"]');
@@ -26500,19 +26557,88 @@ ${suffix}`;
         return;
       }
       const addBtn = e.target.closest('[data-action="map-add"]');
-      if (addBtn) addMapFromInputs(addBtn.getAttribute("data-country"));
+      if (addBtn) {
+        addMapFromInputs(addBtn.getAttribute("data-country"));
+        return;
+      }
+      const editBtn = e.target.closest('[data-action="map-edit"]');
+      if (editBtn) {
+        editingMapId = editBtn.getAttribute("data-id");
+        renderMapsTab();
+        return;
+      }
+      const cancelBtn = e.target.closest('[data-action="map-edit-cancel"]');
+      if (cancelBtn) {
+        editingMapId = null;
+        renderMapsTab();
+        return;
+      }
+      const saveBtn = e.target.closest('[data-action="map-edit-save"]');
+      if (saveBtn) {
+        saveMapEditFromLi(saveBtn.closest(".saved-map-item-editing"));
+        return;
+      }
     });
     document.getElementById("mapsList").addEventListener("keydown", function(e) {
+      if (e.key === "Escape" && e.target.closest(".saved-map-item-editing")) {
+        editingMapId = null;
+        renderMapsTab();
+        return;
+      }
       if (e.key !== "Enter") return;
+      const editingLi = e.target.closest(".saved-map-item-editing");
+      if (editingLi && e.target.tagName !== "SELECT") {
+        e.preventDefault();
+        saveMapEditFromLi(editingLi);
+        return;
+      }
       const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"], [data-field="mapCity"], [data-field="mapCategory"]');
       if (!input) return;
       e.preventDefault();
       addMapFromInputs(input.getAttribute("data-country"));
     });
+    document.getElementById("mapsList").addEventListener("change", function(e) {
+      const countryCheck = e.target.closest(".export-country-check");
+      if (countryCheck) {
+        const groups = getSavedMapCities(countryCheck.getAttribute("data-country"));
+        groups.forEach(function(g) {
+          if (countryCheck.checked) mapsExportExcludedCities.delete(g.id);
+          else mapsExportExcludedCities.add(g.id);
+        });
+        renderMapsTab();
+        return;
+      }
+      const cityCheck = e.target.closest(".export-city-check");
+      if (cityCheck) {
+        const cityId = cityCheck.getAttribute("data-city");
+        if (cityCheck.checked) mapsExportExcludedCities.delete(cityId);
+        else mapsExportExcludedCities.add(cityId);
+        renderMapsTab();
+      }
+    });
+    document.getElementById("mapsExportSelectAllBtn").addEventListener("click", function() {
+      mapsExportExcludedCities.clear();
+      renderMapsTab();
+    });
+    document.getElementById("mapsExportSelectNoneBtn").addEventListener("click", function() {
+      Object.keys(state.savedMaps).forEach(function(countryId) {
+        state.savedMaps[countryId].forEach(function(g) {
+          mapsExportExcludedCities.add(g.id);
+        });
+      });
+      renderMapsTab();
+    });
     document.getElementById("exportMapsCsvBtn").addEventListener("click", function() {
-      const rows = flattenSavedMapsForExport();
-      if (!rows.length) {
+      const allRows = flattenSavedMapsForExport();
+      if (!allRows.length) {
         setMapsExportNote("\u5C1A\u672A\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u6C92\u6709\u6771\u897F\u53EF\u4EE5\u532F\u51FA\u3002");
+        return;
+      }
+      const rows = allRows.filter(function(r) {
+        return !mapsExportExcludedCities.has(r.cityGroupId);
+      });
+      if (!rows.length) {
+        setMapsExportNote("\u76EE\u524D\u6C92\u6709\u52FE\u9078\u4EFB\u4F55\u570B\u5BB6\u6216\u57CE\u5E02\uFF0C\u5148\u5728\u4E0B\u9762\u52FE\u9078\u60F3\u532F\u51FA\u7684\u7BC4\u570D\u3002");
         return;
       }
       downloadTextFile("google-maps-collection.csv", buildGoogleMyMapsCsv(rows), "text/csv");

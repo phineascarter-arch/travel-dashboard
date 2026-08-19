@@ -822,6 +822,7 @@ a { color: var(--gold-bright); }
 .maps-summary { font-family: var(--mono); font-size: 0.86rem; color: var(--text-dim); }
 .maps-export-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 10px 0; }
 .maps-export-note { font-family: var(--mono); font-size: 0.8rem; color: var(--text-dim); }
+.maps-export-count { font-family: var(--mono); font-size: 0.8rem; color: var(--gold-bright); }
 
 #mapsSearchInput {
   width: 100%; margin: 12px 0 20px; box-sizing: border-box;
@@ -830,6 +831,9 @@ a { color: var(--gold-bright); }
 }
 #mapsSearchInput::placeholder { color: var(--text-dim); }
 #mapsSearchInput:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+.maps-export-check { display: inline-flex; align-items: center; margin-right: 2px; }
+.maps-export-check input[type="checkbox"] { accent-color: var(--gold); cursor: pointer; }
 
 .saved-map-group { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed var(--border); }
 .saved-map-group:last-child { border-bottom: none; }
@@ -840,6 +844,7 @@ a { color: var(--gold-bright); }
 .saved-map-city { margin: 0 0 10px 4px; padding-left: 10px; border-left: 2px solid var(--border); }
 .saved-map-city-name {
   margin: 0 0 6px; font-family: var(--mono); font-size: 0.86rem; color: var(--text-dim); letter-spacing: 0.5px;
+  display: flex; align-items: center; gap: 4px;
 }
 .saved-map-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .saved-map-item {
@@ -850,10 +855,26 @@ a { color: var(--gold-bright); }
 .saved-map-item a { color: var(--gold-bright); font-family: var(--mono); font-size: 0.92rem; word-break: break-word; text-decoration: none; display: inline-flex; align-items: center; flex-wrap: wrap; gap: 6px; }
 .saved-map-item .saved-map-item-label { text-decoration: none; }
 .saved-map-item a:hover .saved-map-item-label { text-decoration: underline; }
-.saved-map-item .map-remove {
+.saved-map-item-actions { display: flex; align-items: center; gap: 6px; flex: none; }
+.saved-map-item .map-remove, .saved-map-item .map-edit {
   border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; flex: none; line-height: 1;
 }
 .saved-map-item .map-remove:hover { color: var(--c-restricted); }
+.saved-map-item .map-edit:hover { color: var(--gold-bright); }
+
+.saved-map-item-editing {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  border: 1px solid var(--gold-dim); border-radius: 4px; padding: 6px 10px;
+  background: var(--bg-inset);
+}
+.saved-map-item-editing input, .saved-map-item-editing select {
+  padding: 6px 8px; border: 1px dashed var(--border); border-radius: 4px;
+  background: var(--bg-input); color: var(--text); font-family: var(--mono); font-size: 0.88rem;
+}
+.saved-map-item-editing .map-edit-city { flex: 1 1 100px; min-width: 0; }
+.saved-map-item-editing .map-edit-category { flex: 1 1 100px; min-width: 0; }
+.saved-map-item-editing .map-edit-label { flex: 1 1 130px; min-width: 0; }
+.saved-map-item-editing .map-edit-url { flex: 2 1 200px; min-width: 0; }
 
 .map-category-badge {
   display: inline-block; padding: 1px 7px; border-radius: 3px;
