@@ -25263,6 +25263,7 @@ ${suffix}`;
         budget: { perStop: {}, availableFunds: null },
         cities: {},
         legTransport: {},
+        savedMaps: {},
         emergencyCard: { insurerName: "", insurerPhone: "", medicalNote: "", passportNo: "", cards: [], contacts: [] }
       };
     }
@@ -25573,6 +25574,35 @@ ${suffix}`;
       });
       saveState();
       renderRoute();
+    }
+    function getSavedMaps(countryId) {
+      return state.savedMaps[countryId] || [];
+    }
+    function normalizeMapUrl(url) {
+      const trimmed = url.trim();
+      if (/^https?:\/\//i.test(trimmed)) return trimmed;
+      return "https://" + trimmed.replace(/^\/+/, "");
+    }
+    function addSavedMap(countryId, label, url) {
+      const trimmedUrl = url.trim();
+      if (!trimmedUrl) return;
+      if (!state.savedMaps[countryId]) state.savedMaps[countryId] = [];
+      state.savedMaps[countryId].push({
+        id: "map_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        label: label.trim() || "\u672A\u547D\u540D\u9023\u7D50",
+        url: normalizeMapUrl(trimmedUrl)
+      });
+      saveState();
+      renderMapsTab();
+    }
+    function removeSavedMap(countryId, mapId) {
+      if (!state.savedMaps[countryId]) return;
+      state.savedMaps[countryId] = state.savedMaps[countryId].filter(function(m) {
+        return m.id !== mapId;
+      });
+      if (!state.savedMaps[countryId].length) delete state.savedMaps[countryId];
+      saveState();
+      renderMapsTab();
     }
     const geocodeQueue = [];
     let geocodeQueueBusy = false;
@@ -26311,12 +26341,69 @@ ${suffix}`;
       if (!value) return;
       addChecklistItem("country", input.getAttribute("data-country"), value);
     });
+    function renderMapsTab() {
+      const listEl = document.getElementById("mapsList");
+      if (!listEl) return;
+      const query = document.getElementById("mapsSearchInput").value.trim().toLowerCase();
+      let countries;
+      if (query) {
+        countries = getAllCountries().filter(function(c) {
+          return c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || "").toLowerCase().indexOf(query) !== -1;
+        });
+      } else {
+        countries = Object.keys(state.savedMaps).map(function(id) {
+          return findCountry(id);
+        }).filter(Boolean);
+      }
+      countries.sort(function(a, b) {
+        const ra = REGION_ORDER.indexOf(a.region), rb = REGION_ORDER.indexOf(b.region);
+        if (ra !== rb) return ra - rb;
+        return a.name.localeCompare(b.name, "zh-Hant");
+      });
+      if (!countries.length) {
+        listEl.innerHTML = query ? '<div class="empty-state">\u627E\u4E0D\u5230\u7B26\u5408\u7684\u570B\u5BB6</div>' : '<div class="empty-state">\u9084\u6C92\u6709\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u4E0A\u9762\u641C\u5C0B\u570B\u5BB6\u5F8C\u5C31\u53EF\u4EE5\u65B0\u589E\u3002</div>';
+      } else {
+        listEl.innerHTML = countries.map(function(c) {
+          const maps = getSavedMaps(c.id);
+          const mapsHtml = maps.length ? maps.map(function(m) {
+            return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">\u{1F517} ' + escapeHtml(m.label) + '</a><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></li>';
+          }).join("") : '<li class="empty-state-small">\u5C1A\u672A\u65B0\u589E</li>';
+          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + flagImg(c.id) + escapeHtml(c.name) + '</h4><ul class="saved-map-list">' + mapsHtml + '</ul><div class="saved-map-add-row"><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u4F4F\u5BBF\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button></div></div>';
+        }).join("");
+      }
+      const savedCountryCount = Object.keys(state.savedMaps).length;
+      document.getElementById("mapsSummary").textContent = savedCountryCount ? "\u5DF2\u6536\u85CF " + savedCountryCount + " \u500B\u570B\u5BB6\u7684\u5730\u5716" : "";
+    }
+    function addMapFromInputs(countryId) {
+      const labelInput = document.querySelector('.map-label-input[data-country="' + countryId + '"]');
+      const urlInput = document.querySelector('.map-url-input[data-country="' + countryId + '"]');
+      if (!urlInput || !urlInput.value.trim()) return;
+      addSavedMap(countryId, labelInput.value, urlInput.value);
+    }
+    document.getElementById("mapsSearchInput").addEventListener("input", renderMapsTab);
+    document.getElementById("mapsList").addEventListener("click", function(e) {
+      const removeBtn = e.target.closest('[data-action="map-remove"]');
+      if (removeBtn) {
+        removeSavedMap(removeBtn.getAttribute("data-country"), removeBtn.getAttribute("data-id"));
+        return;
+      }
+      const addBtn = e.target.closest('[data-action="map-add"]');
+      if (addBtn) addMapFromInputs(addBtn.getAttribute("data-country"));
+    });
+    document.getElementById("mapsList").addEventListener("keydown", function(e) {
+      if (e.key !== "Enter") return;
+      const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"]');
+      if (!input) return;
+      e.preventDefault();
+      addMapFromInputs(input.getAttribute("data-country"));
+    });
     function renderAll() {
       renderStats();
       renderGrid();
       renderRoute();
       renderMap();
       renderChecklist();
+      renderMapsTab();
       renderCurrencyTab();
       renderConverter();
       renderBudgetTab();

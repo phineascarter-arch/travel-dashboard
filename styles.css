@@ -816,6 +816,39 @@ a { color: var(--gold-bright); }
 }
 .country-checklist-group .cl-progress { font-size: 0.8rem; color: var(--text-dim); font-weight: 400; }
 
+/* ---------- Google Maps collection ---------- */
+.maps-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.maps-header h2 { margin: 0; font-family: var(--mono); font-size: 1rem; color: var(--gold-bright); letter-spacing: 1px; }
+.maps-summary { font-family: var(--mono); font-size: 0.86rem; color: var(--text-dim); }
+#mapsSearchInput { width: 100%; margin: 12px 0 20px; }
+
+.saved-map-group { margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px dashed var(--border); }
+.saved-map-group:last-child { border-bottom: none; }
+.saved-map-group h4 {
+  margin: 0 0 8px; font-family: var(--mono); font-size: 0.98rem; color: var(--gold-bright);
+  display: flex; align-items: center; gap: 8px;
+}
+.saved-map-list { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.saved-map-item {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  border: 1px solid var(--border); border-radius: 4px; padding: 6px 10px;
+  background: var(--bg-inset);
+}
+.saved-map-item a { color: var(--c-eta); font-family: var(--mono); font-size: 0.92rem; text-decoration: none; word-break: break-word; }
+.saved-map-item a:hover { text-decoration: underline; }
+.saved-map-item .map-remove {
+  border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 0.9rem; flex: none; line-height: 1;
+}
+.saved-map-item .map-remove:hover { color: var(--c-restricted); }
+.saved-map-add-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.saved-map-add-row .map-label-input { flex: 1 1 140px; min-width: 0; }
+.saved-map-add-row .map-url-input { flex: 2 1 220px; min-width: 0; }
+.saved-map-add-row input {
+  padding: 6px 8px; border: 1px dashed var(--border); border-radius: 4px;
+  background: transparent; color: var(--text-dim); font-family: var(--mono); font-size: 0.88rem;
+}
+.saved-map-add-row input:focus { outline: 1px solid var(--gold); color: var(--text); }
+
 /* ---------- modal ---------- */
 .modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(2, 4, 8, 0.75); align-items: center; justify-content: center; z-index: 50; }
 .modal-backdrop.open { display: flex; }

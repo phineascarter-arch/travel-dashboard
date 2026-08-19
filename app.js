@@ -99,6 +99,7 @@ import { createClient } from '@supabase/supabase-js';
       budget: { perStop: {}, availableFunds: null },
       cities: {},
       legTransport: {},
+      savedMaps: {},
       emergencyCard: { insurerName: '', insurerPhone: '', medicalNote: '', passportNo: '', cards: [], contacts: [] },
     };
   }
@@ -444,6 +445,44 @@ import { createClient } from '@supabase/supabase-js';
     state.cities[countryId] = state.cities[countryId].filter(function (c) { return c.id !== cityId; });
     saveState();
     renderRoute();
+  }
+
+  // ---------- saved Google Maps links (per country, keyed by country id — not by route stop,
+  // since a "My Maps" a user built while researching a country stays relevant across re-visits) ----------
+  function getSavedMaps(countryId) {
+    return state.savedMaps[countryId] || [];
+  }
+
+  // Whatever the user pastes always ends up rendered as an <a href>, so this guarantees the
+  // stored value actually starts with http(s):// — escapeHtml() only neutralizes HTML syntax,
+  // not a dangerous URL scheme like javascript:, which would still execute on click even with
+  // the text properly escaped. Forcing an https:// prefix when one isn't already there makes
+  // any such attempt just inert garbage after the scheme instead of a live scheme itself.
+  function normalizeMapUrl(url) {
+    const trimmed = url.trim();
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    return 'https://' + trimmed.replace(/^\/+/, '');
+  }
+
+  function addSavedMap(countryId, label, url) {
+    const trimmedUrl = url.trim();
+    if (!trimmedUrl) return;
+    if (!state.savedMaps[countryId]) state.savedMaps[countryId] = [];
+    state.savedMaps[countryId].push({
+      id: 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      label: label.trim() || '未命名連結',
+      url: normalizeMapUrl(trimmedUrl),
+    });
+    saveState();
+    renderMapsTab();
+  }
+
+  function removeSavedMap(countryId, mapId) {
+    if (!state.savedMaps[countryId]) return;
+    state.savedMaps[countryId] = state.savedMaps[countryId].filter(function (m) { return m.id !== mapId; });
+    if (!state.savedMaps[countryId].length) delete state.savedMaps[countryId];
+    saveState();
+    renderMapsTab();
   }
 
   // ---------- city geocoding (OpenStreetMap Nominatim — free, no key, ~1 req/sec limit) ----------
@@ -1336,12 +1375,94 @@ import { createClient } from '@supabase/supabase-js';
     addChecklistItem('country', input.getAttribute('data-country'), value);
   });
 
+  // ---------- Google Maps collection (per country, database-wide — not scoped to "我的路線") ----------
+  function renderMapsTab() {
+    const listEl = document.getElementById('mapsList');
+    if (!listEl) return;
+    const query = document.getElementById('mapsSearchInput').value.trim().toLowerCase();
+
+    let countries;
+    if (query) {
+      countries = getAllCountries().filter(function (c) {
+        return c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || '').toLowerCase().indexOf(query) !== -1;
+      });
+    } else {
+      // Nothing searched: only show countries that already have a saved link, so the list
+      // isn't 152 empty sections by default — search is how you find a new one to add.
+      countries = Object.keys(state.savedMaps).map(function (id) { return findCountry(id); }).filter(Boolean);
+    }
+
+    countries.sort(function (a, b) {
+      const ra = REGION_ORDER.indexOf(a.region), rb = REGION_ORDER.indexOf(b.region);
+      if (ra !== rb) return ra - rb;
+      return a.name.localeCompare(b.name, 'zh-Hant');
+    });
+
+    if (!countries.length) {
+      listEl.innerHTML = query
+        ? '<div class="empty-state">找不到符合的國家</div>'
+        : '<div class="empty-state">還沒有收藏任何地圖連結，上面搜尋國家後就可以新增。</div>';
+    } else {
+      listEl.innerHTML = countries.map(function (c) {
+        const maps = getSavedMaps(c.id);
+        const mapsHtml = maps.length
+          ? maps.map(function (m) {
+              return '<li class="saved-map-item">' +
+                '<a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">🔗 ' + escapeHtml(m.label) + '</a>' +
+                '<button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-id="' + m.id + '" title="移除">✕</button>' +
+              '</li>';
+            }).join('')
+          : '<li class="empty-state-small">尚未新增</li>';
+        return (
+          '<div class="saved-map-group" data-country="' + c.id + '">' +
+            '<h4>' + flagImg(c.id) + escapeHtml(c.name) + '</h4>' +
+            '<ul class="saved-map-list">' + mapsHtml + '</ul>' +
+            '<div class="saved-map-add-row">' +
+              '<input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="命名（例如：住宿）">' +
+              '<input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="貼上 Google 地圖連結">' +
+              '<button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ 新增</button>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join('');
+    }
+
+    const savedCountryCount = Object.keys(state.savedMaps).length;
+    document.getElementById('mapsSummary').textContent = savedCountryCount ? '已收藏 ' + savedCountryCount + ' 個國家的地圖' : '';
+  }
+
+  function addMapFromInputs(countryId) {
+    const labelInput = document.querySelector('.map-label-input[data-country="' + countryId + '"]');
+    const urlInput = document.querySelector('.map-url-input[data-country="' + countryId + '"]');
+    if (!urlInput || !urlInput.value.trim()) return;
+    addSavedMap(countryId, labelInput.value, urlInput.value);
+  }
+
+  document.getElementById('mapsSearchInput').addEventListener('input', renderMapsTab);
+  document.getElementById('mapsList').addEventListener('click', function (e) {
+    const removeBtn = e.target.closest('[data-action="map-remove"]');
+    if (removeBtn) {
+      removeSavedMap(removeBtn.getAttribute('data-country'), removeBtn.getAttribute('data-id'));
+      return;
+    }
+    const addBtn = e.target.closest('[data-action="map-add"]');
+    if (addBtn) addMapFromInputs(addBtn.getAttribute('data-country'));
+  });
+  document.getElementById('mapsList').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter') return;
+    const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"]');
+    if (!input) return;
+    e.preventDefault();
+    addMapFromInputs(input.getAttribute('data-country'));
+  });
+
   function renderAll() {
     renderStats();
     renderGrid();
     renderRoute();
     renderMap();
     renderChecklist();
+    renderMapsTab();
     renderCurrencyTab();
     renderConverter();
     renderBudgetTab();

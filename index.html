@@ -8,7 +8,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
 <meta name="theme-color" content="#05070d">
-<link rel="stylesheet" href="styles.css?v=20260804232059">
+<link rel="stylesheet" href="styles.css?v=20260819235122">
 <style id="sharePrintStyle">
   .share-doc { max-width: 820px; margin: 0 auto; background: #fff; color: #1a1a1a; font-family: -apple-system, "Segoe UI", "Microsoft JhengHei", Arial, sans-serif; padding: 32px 36px; line-height: 1.55; border-radius: 8px; }
   .share-doc h1 { font-size: 1.4rem; margin: 0 0 4px; color: #14213d; }
@@ -34,6 +34,7 @@
   <button type="button" class="tab-btn" data-tab="map"><span class="tab-icon">🗺</span><span>總覽地圖</span></button>
   <button type="button" class="tab-btn" data-tab="timeline"><span class="tab-icon">⏱</span><span>時間軸</span></button>
   <button type="button" class="tab-btn" data-tab="checklist"><span class="tab-icon">📋</span><span>文件清單</span></button>
+  <button type="button" class="tab-btn" data-tab="maps"><span class="tab-icon">📌</span><span>地圖收藏</span></button>
   <button type="button" class="tab-btn" data-tab="currency"><span class="tab-icon">💱</span><span>貨幣總覽</span></button>
   <button type="button" class="tab-btn" data-tab="budget"><span class="tab-icon">💰</span><span>旅費預算</span></button>
   <button type="button" class="tab-btn" data-tab="share"><span class="tab-icon">📄</span><span>分享摘要</span></button>
@@ -192,6 +193,16 @@
         <div id="countryChecklists"></div>
       </div>
     </div>
+  </section>
+
+  <section class="panel tab-panel maps-tab-panel" data-tab-panel="maps" hidden>
+    <div class="maps-header">
+      <h2><span class="bracket">[</span> 各國 Google 地圖收藏 <span class="bracket">]</span></h2>
+      <span class="maps-summary" id="mapsSummary"></span>
+    </div>
+    <p class="route-hint">貼上 Google 地圖的分享連結（例如你自己整理的 My Maps、或某個地點的連結），可以幫每個國家存好幾筆、自己命名（住宿、景點、餐廳…）。沒有搜尋的話只會列出已經存過連結的國家。</p>
+    <input type="search" id="mapsSearchInput" placeholder="&gt; 搜尋國家，找到後可以新增地圖連結…" autocomplete="off">
+    <div id="mapsList"></div>
   </section>
 
   <section class="panel tab-panel currency-tab-panel" data-tab-panel="currency" hidden>
@@ -366,9 +377,9 @@
   </div>
 </div>
 
-<script src="data/seed-countries.js?v=20260804232059"></script>
-<script src="data/world-map.js?v=20260804232059"></script>
-<script src="dist/app.bundle.js?v=20260804232059"></script>
+<script src="data/seed-countries.js?v=20260819235122"></script>
+<script src="data/world-map.js?v=20260819235122"></script>
+<script src="dist/app.bundle.js?v=20260819235122"></script>
 <script>
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
