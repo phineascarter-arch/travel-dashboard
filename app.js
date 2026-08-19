@@ -448,8 +448,11 @@ import { createClient } from '@supabase/supabase-js';
   }
 
   // ---------- saved Google Maps links (per country, keyed by country id — not by route stop,
-  // since a "My Maps" a user built while researching a country stays relevant across re-visits) ----------
-  function getSavedMaps(countryId) {
+  // since a "My Maps" a user built while researching a country stays relevant across re-visits).
+  // Grouped by city name within a country: state.savedMaps[countryId] = [{ id, cityName, maps:
+  // [{id, label, url}] }] — a city group is created implicitly the first time a link is added
+  // tagged with that city name, same pattern as the route panel's own city list. ----------
+  function getSavedMapCities(countryId) {
     return state.savedMaps[countryId] || [];
   }
 
@@ -464,11 +467,21 @@ import { createClient } from '@supabase/supabase-js';
     return 'https://' + trimmed.replace(/^\/+/, '');
   }
 
-  function addSavedMap(countryId, label, url) {
+  function getOrCreateSavedMapCity(countryId, cityName) {
+    if (!state.savedMaps[countryId]) state.savedMaps[countryId] = [];
+    const trimmed = cityName.trim() || '未命名城市';
+    const existing = state.savedMaps[countryId].filter(function (g) { return g.cityName === trimmed; })[0];
+    if (existing) return existing;
+    const group = { id: 'mapcity_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cityName: trimmed, maps: [] };
+    state.savedMaps[countryId].push(group);
+    return group;
+  }
+
+  function addSavedMap(countryId, cityName, label, url) {
     const trimmedUrl = url.trim();
     if (!trimmedUrl) return;
-    if (!state.savedMaps[countryId]) state.savedMaps[countryId] = [];
-    state.savedMaps[countryId].push({
+    const group = getOrCreateSavedMapCity(countryId, cityName);
+    group.maps.push({
       id: 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
       label: label.trim() || '未命名連結',
       url: normalizeMapUrl(trimmedUrl),
@@ -477,9 +490,13 @@ import { createClient } from '@supabase/supabase-js';
     renderMapsTab();
   }
 
-  function removeSavedMap(countryId, mapId) {
-    if (!state.savedMaps[countryId]) return;
-    state.savedMaps[countryId] = state.savedMaps[countryId].filter(function (m) { return m.id !== mapId; });
+  function removeSavedMap(countryId, cityGroupId, mapId) {
+    const groups = state.savedMaps[countryId];
+    if (!groups) return;
+    const group = groups.filter(function (g) { return g.id === cityGroupId; })[0];
+    if (!group) return;
+    group.maps = group.maps.filter(function (m) { return m.id !== mapId; });
+    state.savedMaps[countryId] = groups.filter(function (g) { return g.maps.length; });
     if (!state.savedMaps[countryId].length) delete state.savedMaps[countryId];
     saveState();
     renderMapsTab();
@@ -597,13 +614,13 @@ import { createClient } from '@supabase/supabase-js';
     const ordered = useLast ? cities.slice().reverse() : cities;
     for (let i = 0; i < ordered.length; i++) {
       const ct = ordered[i];
-      if (typeof ct.lat === 'number' && typeof ct.lng === 'number') return { lat: ct.lat, lng: ct.lng, cityName: ct.name };
+      if (Number.isFinite(ct.lat) && Number.isFinite(ct.lng)) return { lat: ct.lat, lng: ct.lng, cityName: ct.name };
     }
     return null;
   }
 
   function legRoutePoints(prevStopId, prevCountry, curStopId, curCountry) {
-    if (!prevCountry || !curCountry || typeof prevCountry.lat !== 'number' || typeof curCountry.lat !== 'number') return null;
+    if (!prevCountry || !curCountry || !Number.isFinite(prevCountry.lat) || !Number.isFinite(curCountry.lat)) return null;
     const a = cityPoint(prevStopId, true) || { lat: prevCountry.lat, lng: prevCountry.lng, cityName: null };
     const b = cityPoint(curStopId, false) || { lat: curCountry.lat, lng: curCountry.lng, cityName: null };
     return { a: a, b: b, km: haversineKm(a.lat, a.lng, b.lat, b.lng), usedCity: !!(a.cityName || b.cityName) };
@@ -1404,20 +1421,29 @@ import { createClient } from '@supabase/supabase-js';
         : '<div class="empty-state">還沒有收藏任何地圖連結，上面搜尋國家後就可以新增。</div>';
     } else {
       listEl.innerHTML = countries.map(function (c) {
-        const maps = getSavedMaps(c.id);
-        const mapsHtml = maps.length
-          ? maps.map(function (m) {
-              return '<li class="saved-map-item">' +
-                '<a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">🔗 ' + escapeHtml(m.label) + '</a>' +
-                '<button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-id="' + m.id + '" title="移除">✕</button>' +
-              '</li>';
+        const cityGroups = getSavedMapCities(c.id);
+        const citiesHtml = cityGroups.length
+          ? cityGroups.map(function (g) {
+              const mapsHtml = g.maps.map(function (m) {
+                return '<li class="saved-map-item">' +
+                  '<a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">🔗 ' + escapeHtml(m.label) + '</a>' +
+                  '<button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="移除">✕</button>' +
+                '</li>';
+              }).join('');
+              return (
+                '<div class="saved-map-city">' +
+                  '<h5 class="saved-map-city-name">📍 ' + escapeHtml(g.cityName) + '</h5>' +
+                  '<ul class="saved-map-list">' + mapsHtml + '</ul>' +
+                '</div>'
+              );
             }).join('')
-          : '<li class="empty-state-small">尚未新增</li>';
+          : '<div class="empty-state-small">尚未新增</div>';
         return (
           '<div class="saved-map-group" data-country="' + c.id + '">' +
             '<h4>' + flagImg(c.id) + escapeHtml(c.name) + '</h4>' +
-            '<ul class="saved-map-list">' + mapsHtml + '</ul>' +
+            citiesHtml +
             '<div class="saved-map-add-row">' +
+              '<input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="城市（例如：曼谷）">' +
               '<input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="命名（例如：住宿）">' +
               '<input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="貼上 Google 地圖連結">' +
               '<button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ 新增</button>' +
@@ -1432,17 +1458,18 @@ import { createClient } from '@supabase/supabase-js';
   }
 
   function addMapFromInputs(countryId) {
+    const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
     const labelInput = document.querySelector('.map-label-input[data-country="' + countryId + '"]');
     const urlInput = document.querySelector('.map-url-input[data-country="' + countryId + '"]');
     if (!urlInput || !urlInput.value.trim()) return;
-    addSavedMap(countryId, labelInput.value, urlInput.value);
+    addSavedMap(countryId, cityInput ? cityInput.value : '', labelInput.value, urlInput.value);
   }
 
   document.getElementById('mapsSearchInput').addEventListener('input', renderMapsTab);
   document.getElementById('mapsList').addEventListener('click', function (e) {
     const removeBtn = e.target.closest('[data-action="map-remove"]');
     if (removeBtn) {
-      removeSavedMap(removeBtn.getAttribute('data-country'), removeBtn.getAttribute('data-id'));
+      removeSavedMap(removeBtn.getAttribute('data-country'), removeBtn.getAttribute('data-city'), removeBtn.getAttribute('data-id'));
       return;
     }
     const addBtn = e.target.closest('[data-action="map-add"]');
@@ -1450,7 +1477,7 @@ import { createClient } from '@supabase/supabase-js';
   });
   document.getElementById('mapsList').addEventListener('keydown', function (e) {
     if (e.key !== 'Enter') return;
-    const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"]');
+    const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"], [data-field="mapCity"]');
     if (!input) return;
     e.preventDefault();
     addMapFromInputs(input.getAttribute('data-country'));

@@ -25575,7 +25575,7 @@ ${suffix}`;
       saveState();
       renderRoute();
     }
-    function getSavedMaps(countryId) {
+    function getSavedMapCities(countryId) {
       return state.savedMaps[countryId] || [];
     }
     function normalizeMapUrl(url) {
@@ -25583,11 +25583,22 @@ ${suffix}`;
       if (/^https?:\/\//i.test(trimmed)) return trimmed;
       return "https://" + trimmed.replace(/^\/+/, "");
     }
-    function addSavedMap(countryId, label, url) {
+    function getOrCreateSavedMapCity(countryId, cityName) {
+      if (!state.savedMaps[countryId]) state.savedMaps[countryId] = [];
+      const trimmed = cityName.trim() || "\u672A\u547D\u540D\u57CE\u5E02";
+      const existing = state.savedMaps[countryId].filter(function(g) {
+        return g.cityName === trimmed;
+      })[0];
+      if (existing) return existing;
+      const group = { id: "mapcity_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), cityName: trimmed, maps: [] };
+      state.savedMaps[countryId].push(group);
+      return group;
+    }
+    function addSavedMap(countryId, cityName, label, url) {
       const trimmedUrl = url.trim();
       if (!trimmedUrl) return;
-      if (!state.savedMaps[countryId]) state.savedMaps[countryId] = [];
-      state.savedMaps[countryId].push({
+      const group = getOrCreateSavedMapCity(countryId, cityName);
+      group.maps.push({
         id: "map_" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         label: label.trim() || "\u672A\u547D\u540D\u9023\u7D50",
         url: normalizeMapUrl(trimmedUrl)
@@ -25595,10 +25606,18 @@ ${suffix}`;
       saveState();
       renderMapsTab();
     }
-    function removeSavedMap(countryId, mapId) {
-      if (!state.savedMaps[countryId]) return;
-      state.savedMaps[countryId] = state.savedMaps[countryId].filter(function(m) {
+    function removeSavedMap(countryId, cityGroupId, mapId) {
+      const groups = state.savedMaps[countryId];
+      if (!groups) return;
+      const group = groups.filter(function(g) {
+        return g.id === cityGroupId;
+      })[0];
+      if (!group) return;
+      group.maps = group.maps.filter(function(m) {
         return m.id !== mapId;
+      });
+      state.savedMaps[countryId] = groups.filter(function(g) {
+        return g.maps.length;
       });
       if (!state.savedMaps[countryId].length) delete state.savedMaps[countryId];
       saveState();
@@ -25701,12 +25720,12 @@ ${suffix}`;
       const ordered = useLast ? cities.slice().reverse() : cities;
       for (let i = 0; i < ordered.length; i++) {
         const ct = ordered[i];
-        if (typeof ct.lat === "number" && typeof ct.lng === "number") return { lat: ct.lat, lng: ct.lng, cityName: ct.name };
+        if (Number.isFinite(ct.lat) && Number.isFinite(ct.lng)) return { lat: ct.lat, lng: ct.lng, cityName: ct.name };
       }
       return null;
     }
     function legRoutePoints(prevStopId, prevCountry, curStopId, curCountry) {
-      if (!prevCountry || !curCountry || typeof prevCountry.lat !== "number" || typeof curCountry.lat !== "number") return null;
+      if (!prevCountry || !curCountry || !Number.isFinite(prevCountry.lat) || !Number.isFinite(curCountry.lat)) return null;
       const a = cityPoint(prevStopId, true) || { lat: prevCountry.lat, lng: prevCountry.lng, cityName: null };
       const b = cityPoint(curStopId, false) || { lat: curCountry.lat, lng: curCountry.lng, cityName: null };
       return { a, b, km: haversineKm(a.lat, a.lng, b.lat, b.lng), usedCity: !!(a.cityName || b.cityName) };
@@ -26364,27 +26383,31 @@ ${suffix}`;
         listEl.innerHTML = query ? '<div class="empty-state">\u627E\u4E0D\u5230\u7B26\u5408\u7684\u570B\u5BB6</div>' : '<div class="empty-state">\u9084\u6C92\u6709\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u4E0A\u9762\u641C\u5C0B\u570B\u5BB6\u5F8C\u5C31\u53EF\u4EE5\u65B0\u589E\u3002</div>';
       } else {
         listEl.innerHTML = countries.map(function(c) {
-          const maps = getSavedMaps(c.id);
-          const mapsHtml = maps.length ? maps.map(function(m) {
-            return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">\u{1F517} ' + escapeHtml(m.label) + '</a><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></li>';
-          }).join("") : '<li class="empty-state-small">\u5C1A\u672A\u65B0\u589E</li>';
-          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + flagImg(c.id) + escapeHtml(c.name) + '</h4><ul class="saved-map-list">' + mapsHtml + '</ul><div class="saved-map-add-row"><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u4F4F\u5BBF\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button></div></div>';
+          const cityGroups = getSavedMapCities(c.id);
+          const citiesHtml = cityGroups.length ? cityGroups.map(function(g) {
+            const mapsHtml = g.maps.map(function(m) {
+              return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer">\u{1F517} ' + escapeHtml(m.label) + '</a><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></li>';
+            }).join("");
+            return '<div class="saved-map-city"><h5 class="saved-map-city-name">\u{1F4CD} ' + escapeHtml(g.cityName) + '</h5><ul class="saved-map-list">' + mapsHtml + "</ul></div>";
+          }).join("") : '<div class="empty-state-small">\u5C1A\u672A\u65B0\u589E</div>';
+          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + flagImg(c.id) + escapeHtml(c.name) + "</h4>" + citiesHtml + '<div class="saved-map-add-row"><input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="\u57CE\u5E02\uFF08\u4F8B\u5982\uFF1A\u66FC\u8C37\uFF09"><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u4F4F\u5BBF\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button></div></div>';
         }).join("");
       }
       const savedCountryCount = Object.keys(state.savedMaps).length;
       document.getElementById("mapsSummary").textContent = savedCountryCount ? "\u5DF2\u6536\u85CF " + savedCountryCount + " \u500B\u570B\u5BB6\u7684\u5730\u5716" : "";
     }
     function addMapFromInputs(countryId) {
+      const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
       const labelInput = document.querySelector('.map-label-input[data-country="' + countryId + '"]');
       const urlInput = document.querySelector('.map-url-input[data-country="' + countryId + '"]');
       if (!urlInput || !urlInput.value.trim()) return;
-      addSavedMap(countryId, labelInput.value, urlInput.value);
+      addSavedMap(countryId, cityInput ? cityInput.value : "", labelInput.value, urlInput.value);
     }
     document.getElementById("mapsSearchInput").addEventListener("input", renderMapsTab);
     document.getElementById("mapsList").addEventListener("click", function(e) {
       const removeBtn = e.target.closest('[data-action="map-remove"]');
       if (removeBtn) {
-        removeSavedMap(removeBtn.getAttribute("data-country"), removeBtn.getAttribute("data-id"));
+        removeSavedMap(removeBtn.getAttribute("data-country"), removeBtn.getAttribute("data-city"), removeBtn.getAttribute("data-id"));
         return;
       }
       const addBtn = e.target.closest('[data-action="map-add"]');
@@ -26392,7 +26415,7 @@ ${suffix}`;
     });
     document.getElementById("mapsList").addEventListener("keydown", function(e) {
       if (e.key !== "Enter") return;
-      const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"]');
+      const input = e.target.closest('[data-field="mapUrl"], [data-field="mapLabel"], [data-field="mapCity"]');
       if (!input) return;
       e.preventDefault();
       addMapFromInputs(input.getAttribute("data-country"));
