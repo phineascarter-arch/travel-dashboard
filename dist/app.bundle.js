@@ -26171,6 +26171,19 @@ ${suffix}`;
       }).join("");
       return '<div class="city-section"><div class="city-header">\u{1F3D9} \u57CE\u5E02\u6E05\u55AE' + (cities.length ? "\uFF08" + cities.length + "\uFF09" + mismatch : "") + "</div>" + (chips ? '<div class="city-chips">' + chips + "</div>" : "") + '<div class="city-add-row"><input type="text" class="city-name-input" data-field="cityName" data-stop="' + stopId + '" placeholder="\u57CE\u5E02\u540D\u7A31"><input type="number" class="city-nights-input" data-field="cityNights" data-stop="' + stopId + '" min="0" placeholder="\u665A\u6578"><button type="button" class="btn btn-small btn-ghost" data-action="city-add" data-stop="' + stopId + '">+ \u65B0\u589E</button></div></div>';
     }
+    const HOME_PLUG_TYPES = ["A", "B"];
+    function computeRouteAdapterTypes() {
+      const needed = /* @__PURE__ */ new Set();
+      state.route.forEach(function(stop) {
+        const c = findCountry(stop.countryId);
+        if (!c || !c.powerPlug) return;
+        c.powerPlug.split(",").forEach(function(t) {
+          const type = t.trim();
+          if (type && HOME_PLUG_TYPES.indexOf(type) === -1) needed.add(type);
+        });
+      });
+      return Array.from(needed).sort();
+    }
     function renderRoute() {
       const list = document.getElementById("routeList");
       const summary = document.getElementById("routeSummary");
@@ -26224,7 +26237,15 @@ ${suffix}`;
         const totalParts = Object.keys(totals).map(function(cur) {
           return escapeHtml(cur + " " + totals[cur].toFixed(2).replace(/\.00$/, ""));
         });
-        summary.innerHTML = "<div>\u9810\u4F30\u7C3D\u8B49\u8CBB\u7528\uFF1A<strong>" + (totalParts.length ? totalParts.join(" + ") : "\u5C1A\u7121\u8CBB\u7528\u8CC7\u6599") + "</strong></div>" + (unknownCount ? "<div>\u26A0\uFE0F \u9084\u6709 " + unknownCount + " \u500B\u76EE\u7684\u5730\u8CBB\u7528\u5F85\u67E5\u8B49</div>" : "");
+        const hasAnyPlugData = state.route.some(function(stop) {
+          const c = findCountry(stop.countryId);
+          return c && c.powerPlug;
+        });
+        const adapterTypes = computeRouteAdapterTypes();
+        const adapterLine = hasAnyPlugData ? "<div>\u{1F50C} " + (adapterTypes.length ? "\u5EFA\u8B70\u6E96\u5099\u8F49\u63A5\u982D\uFF1A<strong>" + escapeHtml(adapterTypes.map(function(t) {
+          return "Type " + t;
+        }).join("\u3001")) + "</strong>" : "\u63D2\u5EA7\u90FD\u8DDF\u53F0\u7063\u76F8\u5BB9\uFF0C\u4E0D\u7528\u5E36\u8F49\u63A5\u982D") + "</div>" : "";
+        summary.innerHTML = "<div>\u9810\u4F30\u7C3D\u8B49\u8CBB\u7528\uFF1A<strong>" + (totalParts.length ? totalParts.join(" + ") : "\u5C1A\u7121\u8CBB\u7528\u8CC7\u6599") + "</strong></div>" + (unknownCount ? "<div>\u26A0\uFE0F \u9084\u6709 " + unknownCount + " \u500B\u76EE\u7684\u5730\u8CBB\u7528\u5F85\u67E5\u8B49</div>" : "") + adapterLine;
       }
       renderRouteLines();
       renderTimeline();

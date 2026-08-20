@@ -1154,6 +1154,23 @@ import { createClient } from '@supabase/supabase-js';
     );
   }
 
+  // Taiwan runs on 110V 60Hz with Type A/B sockets — a device charger brought from home already
+  // plugs into any Type A/B outlet with no adapter, so those two letters are excluded from the
+  // route's "bring an adapter for these" summary even when a destination happens to use them.
+  const HOME_PLUG_TYPES = ['A', 'B'];
+  function computeRouteAdapterTypes() {
+    const needed = new Set();
+    state.route.forEach(function (stop) {
+      const c = findCountry(stop.countryId);
+      if (!c || !c.powerPlug) return;
+      c.powerPlug.split(',').forEach(function (t) {
+        const type = t.trim();
+        if (type && HOME_PLUG_TYPES.indexOf(type) === -1) needed.add(type);
+      });
+    });
+    return Array.from(needed).sort();
+  }
+
   // ---------- rendering: route ----------
   function renderRoute() {
     const list = document.getElementById('routeList');
@@ -1235,9 +1252,19 @@ import { createClient } from '@supabase/supabase-js';
         totals[cur] = (totals[cur] || 0) + c.fee;
       });
       const totalParts = Object.keys(totals).map(function (cur) { return escapeHtml(cur + ' ' + totals[cur].toFixed(2).replace(/\.00$/, '')); });
+
+      const hasAnyPlugData = state.route.some(function (stop) { const c = findCountry(stop.countryId); return c && c.powerPlug; });
+      const adapterTypes = computeRouteAdapterTypes();
+      const adapterLine = hasAnyPlugData
+        ? '<div>🔌 ' + (adapterTypes.length
+            ? '建議準備轉接頭：<strong>' + escapeHtml(adapterTypes.map(function (t) { return 'Type ' + t; }).join('、')) + '</strong>'
+            : '插座都跟台灣相容，不用帶轉接頭') + '</div>'
+        : '';
+
       summary.innerHTML =
         '<div>預估簽證費用：<strong>' + (totalParts.length ? totalParts.join(' + ') : '尚無費用資料') + '</strong></div>' +
-        (unknownCount ? '<div>⚠️ 還有 ' + unknownCount + ' 個目的地費用待查證</div>' : '');
+        (unknownCount ? '<div>⚠️ 還有 ' + unknownCount + ' 個目的地費用待查證</div>' : '') +
+        adapterLine;
     }
 
     renderRouteLines();
