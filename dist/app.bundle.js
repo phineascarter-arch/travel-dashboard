@@ -25289,6 +25289,15 @@ ${suffix}`;
       });
       return out;
     }
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    function sanitizeScheduleEntry(sched) {
+      if (!sched || typeof sched !== "object") return sched;
+      const out = Object.assign({}, sched);
+      ["arrive", "depart"].forEach(function(field) {
+        if (field in out && out[field] != null && !DATE_RE.test(out[field])) out[field] = null;
+      });
+      return out;
+    }
     function mergeState(defaults, saved) {
       const merged = Object.assign({}, defaults, saved || {});
       ["checklist", "budget", "emergencyCard"].forEach(function(key) {
@@ -25321,6 +25330,16 @@ ${suffix}`;
           }) : list;
         });
         merged.cities = sanitizedCities;
+      }
+      if (merged.schedule && typeof merged.schedule === "object") {
+        const sanitizedSchedule = {};
+        Object.keys(merged.schedule).forEach(function(id) {
+          sanitizedSchedule[id] = sanitizeScheduleEntry(merged.schedule[id]);
+        });
+        merged.schedule = sanitizedSchedule;
+      }
+      if (typeof merged.homeCurrency !== "string" || !/^[A-Za-z]{3}$/.test(merged.homeCurrency)) {
+        merged.homeCurrency = defaults.homeCurrency;
       }
       return merged;
     }
@@ -26203,7 +26222,7 @@ ${suffix}`;
           totals[cur] = (totals[cur] || 0) + c.fee;
         });
         const totalParts = Object.keys(totals).map(function(cur) {
-          return cur + " " + totals[cur].toFixed(2).replace(/\.00$/, "");
+          return escapeHtml(cur + " " + totals[cur].toFixed(2).replace(/\.00$/, ""));
         });
         summary.innerHTML = "<div>\u9810\u4F30\u7C3D\u8B49\u8CBB\u7528\uFF1A<strong>" + (totalParts.length ? totalParts.join(" + ") : "\u5C1A\u7121\u8CBB\u7528\u8CC7\u6599") + "</strong></div>" + (unknownCount ? "<div>\u26A0\uFE0F \u9084\u6709 " + unknownCount + " \u500B\u76EE\u7684\u5730\u8CBB\u7528\u5F85\u67E5\u8B49</div>" : "");
       }
@@ -26397,7 +26416,7 @@ ${suffix}`;
         });
       }
       el.innerHTML = tiles.map(function(t) {
-        return '<div class="stat-card' + (t.cls ? " " + t.cls : "") + '"><span class="num">' + t.num + '</span><span class="label">' + t.label + "</span></div>";
+        return '<div class="stat-card' + (t.cls ? " " + t.cls : "") + '"><span class="num">' + escapeHtml(t.num) + '</span><span class="label">' + escapeHtml(t.label) + "</span></div>";
       }).join("") + (totals.hasUnknownFee ? '<div class="timeline-stats-note">\uFF0A\u90E8\u5206\u8CBB\u7528\u5F85\u67E5\u8B49\uFF0C\u672A\u8A08\u5165</div>' : "") + (schengen && schengen.overLimit ? '<div class="timeline-stats-note timeline-stats-warning">\u26A0 \u7533\u6839\u5340 90/180 \u5929\u898F\u5247\uFF1A\u4EE5 ' + fmtDate(schengen.peakDate) + " \u70BA\u57FA\u6E96\u5F80\u56DE\u63A8 180 \u5929\uFF0C\u7D2F\u7A4D\u5728\u7533\u6839\u5340\u5F85\u4E86 " + schengen.peakDays + " \u5929\uFF0C\u5DF2\u8D85\u904E 90 \u5929\u4E0A\u9650\uFF0C\u8ACB\u8ABF\u6574\u884C\u7A0B\u6216\u5206\u6563\u7533\u6839\u7AD9\u9EDE\u7684\u6642\u9593</div>" : "");
     }
     function renderActivityLog() {
@@ -26425,7 +26444,7 @@ ${suffix}`;
           if (leg) legStat = '<div class="activity-stat"><span class="label">\u8DDD\u4E0A\u4E00\u7AD9</span><span class="value">' + fmtKm(leg.km) + '</span></div><div class="activity-stat"><span class="label">' + TRANSPORT_ICONS[leg.mode] + " \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + '</span><span class="value">' + fmtHours(leg.hours) + "</span></div>";
         }
         const feeStr = formatFee(c);
-        const feeStat = '<div class="activity-stat"><span class="label">\u7C3D\u8B49\u8CBB\u7528</span><span class="value' + (feeStr ? "" : " dim") + '">' + (feeStr || (c.visaType === "visa_free" ? "\u514D\u7C3D\u8B49" : "\u5F85\u67E5\u8B49")) + "</span></div>";
+        const feeStat = '<div class="activity-stat"><span class="label">\u7C3D\u8B49\u8CBB\u7528</span><span class="value' + (feeStr ? "" : " dim") + '">' + escapeHtml(feeStr || (c.visaType === "visa_free" ? "\u514D\u7C3D\u8B49" : "\u5F85\u67E5\u8B49")) + "</span></div>";
         const nightsStat = duration !== null ? '<div class="activity-stat"><span class="label">\u5929\u6578</span><span class="value">' + duration + " \u5929</span></div>" : "";
         const cities = getCities(stop.id);
         const citiesHtml = cities.length ? '<div class="activity-cities">\u{1F3D9} ' + cities.map(function(city) {

@@ -152,6 +152,19 @@ import { createClient } from '@supabase/supabase-js';
     return out;
   }
 
+  // Same pattern a third time: renderRoute()'s date inputs render with value="' + sched.arrive +
+  // '", safe only because a real <input type="date"> is what's assumed to have produced the
+  // value — an imported/pulled state isn't constrained to that format at all.
+  const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  function sanitizeScheduleEntry(sched) {
+    if (!sched || typeof sched !== 'object') return sched;
+    const out = Object.assign({}, sched);
+    ['arrive', 'depart'].forEach(function (field) {
+      if (field in out && out[field] != null && !DATE_RE.test(out[field])) out[field] = null;
+    });
+    return out;
+  }
+
   function mergeState(defaults, saved) {
     const merged = Object.assign({}, defaults, saved || {});
     ['checklist', 'budget', 'emergencyCard'].forEach(function (key) {
@@ -185,6 +198,18 @@ import { createClient } from '@supabase/supabase-js';
         }) : list;
       });
       merged.cities = sanitizedCities;
+    }
+    if (merged.schedule && typeof merged.schedule === 'object') {
+      const sanitizedSchedule = {};
+      Object.keys(merged.schedule).forEach(function (id) { sanitizedSchedule[id] = sanitizeScheduleEntry(merged.schedule[id]); });
+      merged.schedule = sanitizedSchedule;
+    }
+    // A handful of render sites (renderSavings among them) concatenate the home-currency code
+    // in raw, trusting that it always came from the <select> populated with real currency codes
+    // from the rates API — true in the normal click-through-the-UI flow, but that select isn't
+    // in the picture at all for an imported/pulled state, which sets state.homeCurrency directly.
+    if (typeof merged.homeCurrency !== 'string' || !/^[A-Za-z]{3}$/.test(merged.homeCurrency)) {
+      merged.homeCurrency = defaults.homeCurrency;
     }
     return merged;
   }
@@ -1209,7 +1234,7 @@ import { createClient } from '@supabase/supabase-js';
         const cur = c.feeCurrency || '其他';
         totals[cur] = (totals[cur] || 0) + c.fee;
       });
-      const totalParts = Object.keys(totals).map(function (cur) { return cur + ' ' + totals[cur].toFixed(2).replace(/\.00$/, ''); });
+      const totalParts = Object.keys(totals).map(function (cur) { return escapeHtml(cur + ' ' + totals[cur].toFixed(2).replace(/\.00$/, '')); });
       summary.innerHTML =
         '<div>預估簽證費用：<strong>' + (totalParts.length ? totalParts.join(' + ') : '尚無費用資料') + '</strong></div>' +
         (unknownCount ? '<div>⚠️ 還有 ' + unknownCount + ' 個目的地費用待查證</div>' : '');
@@ -1423,7 +1448,7 @@ import { createClient } from '@supabase/supabase-js';
     }
 
     el.innerHTML = tiles.map(function (t) {
-      return '<div class="stat-card' + (t.cls ? ' ' + t.cls : '') + '"><span class="num">' + t.num + '</span><span class="label">' + t.label + '</span></div>';
+      return '<div class="stat-card' + (t.cls ? ' ' + t.cls : '') + '"><span class="num">' + escapeHtml(t.num) + '</span><span class="label">' + escapeHtml(t.label) + '</span></div>';
     }).join('') +
       (totals.hasUnknownFee ? '<div class="timeline-stats-note">＊部分費用待查證，未計入</div>' : '') +
       (schengen && schengen.overLimit
@@ -1459,7 +1484,7 @@ import { createClient } from '@supabase/supabase-js';
       }
 
       const feeStr = formatFee(c);
-      const feeStat = '<div class="activity-stat"><span class="label">簽證費用</span><span class="value' + (feeStr ? '' : ' dim') + '">' + (feeStr || (c.visaType === 'visa_free' ? '免簽證' : '待查證')) + '</span></div>';
+      const feeStat = '<div class="activity-stat"><span class="label">簽證費用</span><span class="value' + (feeStr ? '' : ' dim') + '">' + escapeHtml(feeStr || (c.visaType === 'visa_free' ? '免簽證' : '待查證')) + '</span></div>';
       const nightsStat = duration !== null ? '<div class="activity-stat"><span class="label">天數</span><span class="value">' + duration + ' 天</span></div>' : '';
 
       const cities = getCities(stop.id);
