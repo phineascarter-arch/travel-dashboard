@@ -27622,7 +27622,7 @@ ${suffix}`;
     let rates = null;
     let lastBudgetTotal = 0;
     function convertCurrency(amount, from, to) {
-      if (!rates || !amount || !rates[from] || !rates[to]) return null;
+      if (!rates || amount == null || !isFinite(amount) || !rates[from] || !rates[to]) return null;
       return amount / rates[from] * rates[to];
     }
     function fmtMoney(n) {
@@ -27702,10 +27702,10 @@ ${suffix}`;
     }
     function renderConverter() {
       if (!rates) return;
-      const amount = parseFloat(document.getElementById("convAmount").value) || 0;
+      const amount = parseFloat(document.getElementById("convAmount").value);
       const from = document.getElementById("convFrom").value;
       const to = document.getElementById("convTo").value;
-      const result = convertCurrency(amount, from, to);
+      const result = isNaN(amount) ? null : convertCurrency(amount, from, to);
       document.getElementById("convResult").textContent = result !== null ? fmtMoney(amount) + " " + from + " \u2248 " + fmtMoney(result) + " " + to : "\u7121\u6CD5\u63DB\u7B97";
       document.getElementById("convRateLine").textContent = result !== null && amount > 0 ? "\u532F\u7387\uFF1A1 " + from + " \u2248 " + fmtMoney(convertCurrency(1, from, to)) + " " + to : "";
     }

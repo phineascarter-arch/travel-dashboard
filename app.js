@@ -2849,7 +2849,11 @@ import { createClient } from '@supabase/supabase-js';
   let lastBudgetTotal = 0;
 
   function convertCurrency(amount, from, to) {
-    if (!rates || !amount || !rates[from] || !rates[to]) return null;
+    // !amount treats 0 as "nothing to convert" too, which is wrong for the standalone converter
+    // tool (typing "0" shows "無法換算" instead of a correct "0 USD ≈ 0 JPY") — every other call
+    // site already falls back to `|| 0` on a null result, so returning 0 here instead of null
+    // for a zero amount doesn't change their behavior at all.
+    if (!rates || amount == null || !isFinite(amount) || !rates[from] || !rates[to]) return null;
     return (amount / rates[from]) * rates[to];
   }
 
@@ -2927,10 +2931,16 @@ import { createClient } from '@supabase/supabase-js';
 
   function renderConverter() {
     if (!rates) return;
-    const amount = parseFloat(document.getElementById('convAmount').value) || 0;
+    // parseFloat(...) || 0 used to coerce a genuinely-invalid amount ("abc", empty) to 0 before
+    // it even reached convertCurrency() — which then rejected 0 as falsy, so both cases happened
+    // to land on the same "無法換算" message for unrelated reasons. Now that convertCurrency
+    // correctly accepts a real 0, that coincidence breaks: "abc" would show "0 ≈ 0" instead,
+    // silently implying it parsed as zero. Keep invalid/empty input as NaN so it's rejected on
+    // its own merits instead of by accident.
+    const amount = parseFloat(document.getElementById('convAmount').value);
     const from = document.getElementById('convFrom').value;
     const to = document.getElementById('convTo').value;
-    const result = convertCurrency(amount, from, to);
+    const result = isNaN(amount) ? null : convertCurrency(amount, from, to);
     document.getElementById('convResult').textContent = result !== null ? (fmtMoney(amount) + ' ' + from + ' ≈ ' + fmtMoney(result) + ' ' + to) : '無法換算';
     document.getElementById('convRateLine').textContent = (result !== null && amount > 0) ? '匯率：1 ' + from + ' ≈ ' + fmtMoney(convertCurrency(1, from, to)) + ' ' + to : '';
   }
