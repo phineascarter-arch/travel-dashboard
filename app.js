@@ -464,10 +464,36 @@ import { createClient } from '@supabase/supabase-js';
     return MAP_CATEGORIES.filter(function (c) { return c.id === id; })[0] || MAP_CATEGORIES[MAP_CATEGORIES.length - 1];
   }
 
-  // Which saved-map <li> is currently showing its inline edit form (null = none), and which city
-  // groups are excluded from the next export — both are UI-only, in-memory, not persisted state.
+  // Which saved-map <li> is currently showing its inline edit form (null = none), which country's
+  // bulk-paste textarea is open (null = none), and which city groups are excluded from the next
+  // export — all three are UI-only, in-memory, not persisted state.
   let editingMapId = null;
+  let bulkPasteOpenCountry = null;
   let mapsExportExcludedCities = new Set();
+
+  // Each line is either "名稱<TAB>網址" (a straight paste from a spreadsheet column) or just a
+  // bare URL/URL-ish line with an optional label around it ("Some Cafe - https://maps.google...")
+  // — city and category aren't per-line since the whole batch shares whatever's already selected
+  // in that country's add-row. Lines with no recognizable URL are silently skipped (not every
+  // paste is clean), and the caller reports how many lines actually turned into entries.
+  function parseBulkMapLines(text) {
+    const urlRe = /(https?:\/\/\S+|(?:www\.)?[a-z0-9-]+\.[a-z]{2,}(?:\/\S*)?)/i;
+    return text.split(/\r?\n/).map(function (line) {
+      const trimmed = line.trim();
+      if (!trimmed) return null;
+      if (trimmed.indexOf('\t') !== -1) {
+        const parts = trimmed.split('\t');
+        const url = parts.pop().trim();
+        if (!url) return null;
+        return { label: parts.join(' ').trim(), url: url };
+      }
+      const m = trimmed.match(urlRe);
+      if (!m) return null;
+      const label = (trimmed.slice(0, m.index) + trimmed.slice(m.index + m[0].length))
+        .trim().replace(/^[-–—:|,\s]+|[-–—:|,\s]+$/g, '');
+      return { label: label, url: m[0] };
+    }).filter(Boolean);
+  }
 
   function getSavedMapCities(countryId) {
     return state.savedMaps[countryId] || [];
@@ -494,9 +520,11 @@ import { createClient } from '@supabase/supabase-js';
     return group;
   }
 
-  function addSavedMap(countryId, cityName, category, label, url) {
+  // Split out from addSavedMap so bulk-add can push many entries and only saveState()/render
+  // once at the end, instead of once per line.
+  function addSavedMapEntry(countryId, cityName, category, label, url) {
     const trimmedUrl = url.trim();
-    if (!trimmedUrl) return;
+    if (!trimmedUrl) return false;
     const group = getOrCreateSavedMapCity(countryId, cityName);
     group.maps.push({
       id: 'map_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
@@ -504,6 +532,11 @@ import { createClient } from '@supabase/supabase-js';
       label: label.trim() || '未命名連結',
       url: normalizeMapUrl(trimmedUrl),
     });
+    return true;
+  }
+
+  function addSavedMap(countryId, cityName, category, label, url) {
+    if (!addSavedMapEntry(countryId, cityName, category, label, url)) return;
     saveState();
     renderMapsTab();
   }
@@ -1598,7 +1631,17 @@ import { createClient } from '@supabase/supabase-js';
               '<input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="命名（例如：河景飯店，可留空）">' +
               '<input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="貼上 Google 地圖連結">' +
               '<button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ 新增</button>' +
+              '<button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-toggle" data-country="' + c.id + '">📋 批次貼上</button>' +
             '</div>' +
+            (bulkPasteOpenCountry === c.id ?
+              '<div class="saved-map-bulk-row">' +
+                '<textarea class="map-bulk-textarea" data-country="' + c.id + '" rows="4" placeholder="每行一筆，格式「名稱[Tab]網址」或直接貼網址（一行一個）。上面選的城市／分類會套用到整批。"></textarea>' +
+                '<div class="saved-map-bulk-actions">' +
+                  '<button type="button" class="btn btn-small" data-action="map-bulk-add" data-country="' + c.id + '">批次新增</button>' +
+                  '<button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-cancel">取消</button>' +
+                '</div>' +
+              '</div>'
+              : '') +
           '</div>'
         );
       }).join('');
@@ -1620,6 +1663,25 @@ import { createClient } from '@supabase/supabase-js';
     const urlInput = document.querySelector('.map-url-input[data-country="' + countryId + '"]');
     if (!urlInput || !urlInput.value.trim()) return;
     addSavedMap(countryId, cityInput ? cityInput.value : '', categoryInput ? categoryInput.value : '', labelInput.value, urlInput.value);
+  }
+
+  function bulkAddMapsFromTextarea(countryId) {
+    const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
+    const categoryInput = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
+    const textarea = document.querySelector('.map-bulk-textarea[data-country="' + countryId + '"]');
+    if (!textarea) return;
+    const parsed = parseBulkMapLines(textarea.value);
+    const totalLines = textarea.value.split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
+    if (!parsed.length) { setMapsExportNote('沒有解析到任何網址，每行至少要有一個網址。'); return; }
+    let addedCount = 0;
+    parsed.forEach(function (p) {
+      if (addSavedMapEntry(countryId, cityInput ? cityInput.value : '', categoryInput ? categoryInput.value : '', p.label, p.url)) addedCount++;
+    });
+    if (addedCount) saveState();
+    bulkPasteOpenCountry = null;
+    renderMapsTab();
+    const skipped = totalLines - addedCount;
+    setMapsExportNote('已批次新增 ' + addedCount + ' 筆' + (skipped ? '（' + skipped + ' 行沒有找到網址，已略過）' : '') + '。');
   }
 
   // Returns whether the edit actually saved (false when the URL field was left empty) so
@@ -1653,6 +1715,27 @@ import { createClient } from '@supabase/supabase-js';
     if (cancelBtn) { editingMapId = null; renderMapsTab(); return; }
     const saveBtn = e.target.closest('[data-action="map-edit-save"]');
     if (saveBtn) { saveMapEditFromLi(saveBtn.closest('.saved-map-item-editing')); return; }
+    const bulkToggle = e.target.closest('[data-action="map-bulk-toggle"]');
+    if (bulkToggle) {
+      const countryId = bulkToggle.getAttribute('data-country');
+      // renderMapsTab() rebuilds the whole add-row from scratch, which would otherwise wipe
+      // whatever city/category the user already picked before deciding to switch to bulk paste.
+      const cityInputBefore = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
+      const categoryInputBefore = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
+      const cityVal = cityInputBefore ? cityInputBefore.value : '';
+      const categoryVal = categoryInputBefore ? categoryInputBefore.value : '';
+      bulkPasteOpenCountry = bulkPasteOpenCountry === countryId ? null : countryId;
+      renderMapsTab();
+      const cityInputAfter = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
+      const categoryInputAfter = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
+      if (cityInputAfter) cityInputAfter.value = cityVal;
+      if (categoryInputAfter) categoryInputAfter.value = categoryVal;
+      return;
+    }
+    const bulkCancel = e.target.closest('[data-action="map-bulk-cancel"]');
+    if (bulkCancel) { bulkPasteOpenCountry = null; renderMapsTab(); return; }
+    const bulkAdd = e.target.closest('[data-action="map-bulk-add"]');
+    if (bulkAdd) { bulkAddMapsFromTextarea(bulkAdd.getAttribute('data-country')); return; }
   });
   document.getElementById('mapsList').addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && e.target.closest('.saved-map-item-editing')) {
