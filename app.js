@@ -314,7 +314,7 @@ import { createClient } from '@supabase/supabase-js';
   const COUNTRY_CSV_COLUMNS = {
     id: 'string', name: 'string', nameEn: 'string', region: 'string', visaType: 'string',
     stayDays: 'number', fee: 'number', feeCurrency: 'string',
-    powerVoltage: 'string', powerPlug: 'string', bestSeason: 'string', note: 'string',
+    powerVoltage: 'string', powerPlug: 'string', drivingSide: 'string', bestSeason: 'string', note: 'string',
     safetyLevel: 'string', safetyNote: 'string', passportNotRecognized: 'bool',
     yellowFeverStatus: 'string', healthNote: 'string',
     missionName: 'string', missionAddress: 'string', missionPhone: 'string', missionEmergencyPhone: 'string',
@@ -353,11 +353,17 @@ import { createClient } from '@supabase/supabase-js';
   }
 
   function coerceCsvRow(rawRow) {
+    // A blank cell — including a whole column the sheet has never had, like drivingSide when
+    // it's added below — falls back to the bundled seed's value for the same country instead of
+    // wiping it to null/empty. The sheet is meant to *override* the seed baseline for whichever
+    // fields someone actually edits, not silently erase every field they leave blank.
+    const seedMatch = SEED_COUNTRIES.filter(function (c) { return c.id === rawRow.id; })[0];
     const out = {};
     Object.keys(COUNTRY_CSV_COLUMNS).forEach(function (col) {
       const raw = rawRow[col];
       const type = COUNTRY_CSV_COLUMNS[col];
       if (raw === undefined || raw === '') {
+        if (seedMatch && seedMatch[col] !== undefined) { out[col] = seedMatch[col]; return; }
         out[col] = type === 'array' ? [] : (type === 'bool' ? false : null);
         return;
       }
@@ -963,7 +969,12 @@ import { createClient } from '@supabase/supabase-js';
       const stayLine = c.stayDays ? ('可停留 ' + c.stayDays + ' 天') : '';
       const feeLine = formatFee(c);
       const metaBits = [REGION_LABELS[c.region] || c.region, stayLine, feeLine].filter(Boolean);
-      const powerLine = c.powerVoltage ? ('<div class="card-power">🔌 ' + escapeHtml(c.powerVoltage) + (c.powerPlug ? '・Type ' + escapeHtml(c.powerPlug) : '') + '</div>') : '';
+      const drivingSideLabel = c.drivingSide === 'left' ? '靠左行駛' : c.drivingSide === 'right' ? '靠右行駛' : '';
+      const powerBits = [
+        c.powerVoltage ? ('🔌 ' + escapeHtml(c.powerVoltage) + (c.powerPlug ? '・Type ' + escapeHtml(c.powerPlug) : '')) : '',
+        drivingSideLabel ? ('🚗 ' + drivingSideLabel) : '',
+      ].filter(Boolean);
+      const powerLine = powerBits.length ? ('<div class="card-power">' + powerBits.join('・') + '</div>') : '';
       const seasonLine = c.bestSeason ? ('<div class="card-season">☀️ ' + escapeHtml(c.bestSeason) + '</div>') : '';
       const highlighted = c.id === selectedId ? ' highlighted' : '';
       const passportBadge = c.passportNotRecognized ? '<span class="badge badge-passport-blocked" title="該國不承認中華民國護照，出發前務必向該國駐外機構或外交部查證">🚫 不承認台灣護照</span>' : '';

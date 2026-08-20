@@ -25430,6 +25430,7 @@ ${suffix}`;
       feeCurrency: "string",
       powerVoltage: "string",
       powerPlug: "string",
+      drivingSide: "string",
       bestSeason: "string",
       note: "string",
       safetyLevel: "string",
@@ -25488,11 +25489,18 @@ ${suffix}`;
       });
     }
     function coerceCsvRow(rawRow) {
+      const seedMatch = SEED_COUNTRIES.filter(function(c) {
+        return c.id === rawRow.id;
+      })[0];
       const out = {};
       Object.keys(COUNTRY_CSV_COLUMNS).forEach(function(col) {
         const raw = rawRow[col];
         const type = COUNTRY_CSV_COLUMNS[col];
         if (raw === void 0 || raw === "") {
+          if (seedMatch && seedMatch[col] !== void 0) {
+            out[col] = seedMatch[col];
+            return;
+          }
           out[col] = type === "array" ? [] : type === "bool" ? false : null;
           return;
         }
@@ -26049,7 +26057,12 @@ ${suffix}`;
         const stayLine = c.stayDays ? "\u53EF\u505C\u7559 " + c.stayDays + " \u5929" : "";
         const feeLine = formatFee(c);
         const metaBits = [REGION_LABELS[c.region] || c.region, stayLine, feeLine].filter(Boolean);
-        const powerLine = c.powerVoltage ? '<div class="card-power">\u{1F50C} ' + escapeHtml(c.powerVoltage) + (c.powerPlug ? "\u30FBType " + escapeHtml(c.powerPlug) : "") + "</div>" : "";
+        const drivingSideLabel = c.drivingSide === "left" ? "\u9760\u5DE6\u884C\u99DB" : c.drivingSide === "right" ? "\u9760\u53F3\u884C\u99DB" : "";
+        const powerBits = [
+          c.powerVoltage ? "\u{1F50C} " + escapeHtml(c.powerVoltage) + (c.powerPlug ? "\u30FBType " + escapeHtml(c.powerPlug) : "") : "",
+          drivingSideLabel ? "\u{1F697} " + drivingSideLabel : ""
+        ].filter(Boolean);
+        const powerLine = powerBits.length ? '<div class="card-power">' + powerBits.join("\u30FB") + "</div>" : "";
         const seasonLine = c.bestSeason ? '<div class="card-season">\u2600\uFE0F ' + escapeHtml(c.bestSeason) + "</div>" : "";
         const highlighted = c.id === selectedId ? " highlighted" : "";
         const passportBadge = c.passportNotRecognized ? '<span class="badge badge-passport-blocked" title="\u8A72\u570B\u4E0D\u627F\u8A8D\u4E2D\u83EF\u6C11\u570B\u8B77\u7167\uFF0C\u51FA\u767C\u524D\u52D9\u5FC5\u5411\u8A72\u570B\u99D0\u5916\u6A5F\u69CB\u6216\u5916\u4EA4\u90E8\u67E5\u8B49">\u{1F6AB} \u4E0D\u627F\u8A8D\u53F0\u7063\u8B77\u7167</span>' : "";
