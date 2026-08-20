@@ -970,11 +970,8 @@ import { createClient } from '@supabase/supabase-js';
       const feeLine = formatFee(c);
       const metaBits = [REGION_LABELS[c.region] || c.region, stayLine, feeLine].filter(Boolean);
       const drivingSideLabel = c.drivingSide === 'left' ? '靠左行駛' : c.drivingSide === 'right' ? '靠右行駛' : '';
-      const powerBits = [
-        c.powerVoltage ? ('🔌 ' + escapeHtml(c.powerVoltage) + (c.powerPlug ? '・Type ' + escapeHtml(c.powerPlug) : '')) : '',
-        drivingSideLabel ? ('🚗 ' + drivingSideLabel) : '',
-      ].filter(Boolean);
-      const powerLine = powerBits.length ? ('<div class="card-power">' + powerBits.join('・') + '</div>') : '';
+      const powerLine = c.powerVoltage ? ('<div class="card-power">🔌 ' + escapeHtml(c.powerVoltage) + (c.powerPlug ? '・Type ' + escapeHtml(c.powerPlug) : '') + '</div>') : '';
+      const driveLine = drivingSideLabel ? ('<div class="card-drive">🚗 ' + drivingSideLabel + '</div>') : '';
       const seasonLine = c.bestSeason ? ('<div class="card-season">☀️ ' + escapeHtml(c.bestSeason) + '</div>') : '';
       const highlighted = c.id === selectedId ? ' highlighted' : '';
       const passportBadge = c.passportNotRecognized ? '<span class="badge badge-passport-blocked" title="該國不承認中華民國護照，出發前務必向該國駐外機構或外交部查證">🚫 不承認台灣護照</span>' : '';
@@ -1000,6 +997,7 @@ import { createClient } from '@supabase/supabase-js';
           '</div>' +
           '<div class="card-meta">' + metaBits.map(function (b) { return '<span>' + escapeHtml(b) + '</span>'; }).join('') + '</div>' +
           powerLine +
+          driveLine +
           seasonLine +
           note +
           safetyNoteLine +
@@ -2476,6 +2474,14 @@ import { createClient } from '@supabase/supabase-js';
     const host = document.getElementById('timelineMapContainer');
     const viewport = document.getElementById('timelineMapViewport');
     if (!mapSvg || !host || !viewport || !host.contains(mapSvg)) return;
+    if (!viewport.clientWidth || !viewport.clientHeight) {
+      // Right after switching to the timeline tab, the map has just been reparented into a
+      // container that hasn't been laid out yet this frame — clientWidth/Height still read 0,
+      // which feeds a 0/0 into the zoom-scale math below and produces scale(NaN) on the SVG
+      // transform. Retry once layout has actually settled instead of applying a broken transform.
+      requestAnimationFrame(function () { fitMapToPoints(points); });
+      return;
+    }
 
     const key = points.map(function (p) { return p.stopId; }).join(',');
     if (timelineMapUserAdjusted && key === lastFitRouteKey) return;

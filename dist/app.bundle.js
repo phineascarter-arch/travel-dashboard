@@ -26058,11 +26058,8 @@ ${suffix}`;
         const feeLine = formatFee(c);
         const metaBits = [REGION_LABELS[c.region] || c.region, stayLine, feeLine].filter(Boolean);
         const drivingSideLabel = c.drivingSide === "left" ? "\u9760\u5DE6\u884C\u99DB" : c.drivingSide === "right" ? "\u9760\u53F3\u884C\u99DB" : "";
-        const powerBits = [
-          c.powerVoltage ? "\u{1F50C} " + escapeHtml(c.powerVoltage) + (c.powerPlug ? "\u30FBType " + escapeHtml(c.powerPlug) : "") : "",
-          drivingSideLabel ? "\u{1F697} " + drivingSideLabel : ""
-        ].filter(Boolean);
-        const powerLine = powerBits.length ? '<div class="card-power">' + powerBits.join("\u30FB") + "</div>" : "";
+        const powerLine = c.powerVoltage ? '<div class="card-power">\u{1F50C} ' + escapeHtml(c.powerVoltage) + (c.powerPlug ? "\u30FBType " + escapeHtml(c.powerPlug) : "") + "</div>" : "";
+        const driveLine = drivingSideLabel ? '<div class="card-drive">\u{1F697} ' + drivingSideLabel + "</div>" : "";
         const seasonLine = c.bestSeason ? '<div class="card-season">\u2600\uFE0F ' + escapeHtml(c.bestSeason) + "</div>" : "";
         const highlighted = c.id === selectedId ? " highlighted" : "";
         const passportBadge = c.passportNotRecognized ? '<span class="badge badge-passport-blocked" title="\u8A72\u570B\u4E0D\u627F\u8A8D\u4E2D\u83EF\u6C11\u570B\u8B77\u7167\uFF0C\u51FA\u767C\u524D\u52D9\u5FC5\u5411\u8A72\u570B\u99D0\u5916\u6A5F\u69CB\u6216\u5916\u4EA4\u90E8\u67E5\u8B49">\u{1F6AB} \u4E0D\u627F\u8A8D\u53F0\u7063\u8B77\u7167</span>' : "";
@@ -26077,7 +26074,7 @@ ${suffix}`;
         }).join("") + "</ul></details>" : "";
         return '<div class="country-card' + highlighted + '" data-id="' + c.id + '"><div class="card-top"><div><div class="card-name">' + flagImg(c.id) + escapeHtml(c.name) + "</div>" + (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + "</div>" : "") + '</div><div class="card-badges">' + passportBadge + '<span class="badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + "</span>" + safetyBadge + heritageBadge + vaccineBadge + '</div></div><div class="card-meta">' + metaBits.map(function(b) {
           return "<span>" + escapeHtml(b) + "</span>";
-        }).join("") + "</div>" + powerLine + seasonLine + note + safetyNoteLine + healthNoteLine + personal + heritageDetail + '<div class="card-bottom"><select class="status-select" data-action="status" data-id="' + c.id + '">' + Object.keys(STATUS_LABELS).map(function(k) {
+        }).join("") + "</div>" + powerLine + driveLine + seasonLine + note + safetyNoteLine + healthNoteLine + personal + heritageDetail + '<div class="card-bottom"><select class="status-select" data-action="status" data-id="' + c.id + '">' + Object.keys(STATUS_LABELS).map(function(k) {
           return '<option value="' + k + '"' + (k === status ? " selected" : "") + ">" + STATUS_LABELS[k] + "</option>";
         }).join("") + '</select><div class="card-actions">' + (routeCount ? '<span class="route-count-badge">\u8DEF\u7DDA\u4E2D\xD7' + routeCount + "</span>" : "") + '<button class="btn btn-small btn-primary" data-action="add-route" data-id="' + c.id + '">' + (routeCount ? "\uFF0B \u518D\u6B21\u52A0\u5165" : "\uFF0B \u52A0\u5165\u8DEF\u7DDA") + '</button><button class="btn btn-small btn-ghost" data-action="edit" data-id="' + c.id + '">\u7DE8\u8F2F</button></div></div></div>';
       }).join("");
@@ -27303,6 +27300,12 @@ ${suffix}`;
       const host = document.getElementById("timelineMapContainer");
       const viewport = document.getElementById("timelineMapViewport");
       if (!mapSvg || !host || !viewport || !host.contains(mapSvg)) return;
+      if (!viewport.clientWidth || !viewport.clientHeight) {
+        requestAnimationFrame(function() {
+          fitMapToPoints(points);
+        });
+        return;
+      }
       const key = points.map(function(p) {
         return p.stopId;
       }).join(",");
