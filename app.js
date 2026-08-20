@@ -113,11 +113,46 @@ import { createClient } from '@supabase/supabase-js';
   // the checklist tab AND the emergency tab's mission list blank on load). Merge these
   // specific nested defaults one level deep so a saved state from any past schema version
   // still has every field newer code expects.
+  // Several render paths (country cards, the map tooltip, the budget fee table) concatenate
+  // visaType/safetyLevel/yellowFeverStatus/region straight into an HTML class attribute or cell
+  // without escaping, trusting the <select>-based edit form to be the only way these fields ever
+  // get set. It isn't — customCountries/overrides also arrive from a manually-imported backup
+  // file or a pulled cloud-sync row, neither of which is validated, so one of those fields could
+  // just as easily be an XSS payload as a real value. Constrain them to the same fixed set the
+  // UI itself offers.
+  function sanitizeEnumField(value, validValues, fallback) {
+    return validValues.indexOf(value) !== -1 ? value : fallback;
+  }
+  function sanitizeCountryFields(fields) {
+    if (!fields || typeof fields !== 'object') return fields;
+    const out = Object.assign({}, fields);
+    if ('visaType' in out) out.visaType = sanitizeEnumField(out.visaType, Object.keys(VISA_LABELS), 'visa_required');
+    if ('safetyLevel' in out) out.safetyLevel = out.safetyLevel == null ? null : sanitizeEnumField(out.safetyLevel, Object.keys(SAFETY_LABELS), null);
+    if ('yellowFeverStatus' in out) out.yellowFeverStatus = out.yellowFeverStatus == null ? null : sanitizeEnumField(out.yellowFeverStatus, Object.keys(YELLOW_FEVER_LABELS), null);
+    if ('region' in out) out.region = sanitizeEnumField(out.region, Object.keys(REGION_LABELS), 'asia');
+    // The edit form always sends these through Number(...), but an imported/pulled state
+    // doesn't pass through that form — nothing stops stayDays from arriving as a string instead,
+    // and it's concatenated straight into the map tooltip's HTML without escaping.
+    if ('stayDays' in out) out.stayDays = out.stayDays == null ? null : (Number(out.stayDays) || null);
+    if ('fee' in out) out.fee = out.fee == null ? null : (Number(out.fee) || null);
+    return out;
+  }
+
   function mergeState(defaults, saved) {
     const merged = Object.assign({}, defaults, saved || {});
     ['checklist', 'budget', 'emergencyCard'].forEach(function (key) {
       merged[key] = Object.assign({}, defaults[key], (saved && saved[key]) || {});
     });
+    // Sanitize right here — the one place a localStorage load, a JSON-file import, and a pulled
+    // cloud-sync row all funnel through — instead of hardening every render site individually.
+    if (Array.isArray(merged.customCountries)) {
+      merged.customCountries = merged.customCountries.map(sanitizeCountryFields);
+    }
+    if (merged.overrides && typeof merged.overrides === 'object') {
+      const sanitizedOverrides = {};
+      Object.keys(merged.overrides).forEach(function (id) { sanitizedOverrides[id] = sanitizeCountryFields(merged.overrides[id]); });
+      merged.overrides = sanitizedOverrides;
+    }
     return merged;
   }
 
@@ -627,7 +662,13 @@ import { createClient } from '@supabase/supabase-js';
   }
 
   function csvField(v) {
-    const s = String(v == null ? '' : v);
+    let s = String(v == null ? '' : v);
+    // CSV/formula injection (CWE-1236): a cell value starting with =, +, -, or @ is read as a
+    // live formula by Excel/Sheets/LibreOffice when the file is opened there — and city/label
+    // here are free text a user typed (or bulk-pasted from an untrusted list), so nothing stops
+    // a payload like =HYPERLINK("http://evil","x") from ending up in one. A leading single quote
+    // is the standard neutralizer: spreadsheet apps then render the cell as plain text.
+    if (/^[=+\-@]/.test(s)) s = "'" + s;
     return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
   }
 
@@ -975,9 +1016,9 @@ import { createClient } from '@supabase/supabase-js';
       const seasonLine = c.bestSeason ? ('<div class="card-season">☀️ ' + escapeHtml(c.bestSeason) + '</div>') : '';
       const highlighted = c.id === selectedId ? ' highlighted' : '';
       const passportBadge = c.passportNotRecognized ? '<span class="badge badge-passport-blocked" title="該國不承認中華民國護照，出發前務必向該國駐外機構或外交部查證">🚫 不承認台灣護照</span>' : '';
-      const safetyBadge = c.safetyLevel ? '<span class="badge safety-badge-' + c.safetyLevel + '">🛡 ' + SAFETY_LABELS[c.safetyLevel] + '</span>' : '';
+      const safetyBadge = c.safetyLevel ? '<span class="badge safety-badge-' + escapeHtml(c.safetyLevel) + '">🛡 ' + escapeHtml(SAFETY_LABELS[c.safetyLevel] || c.safetyLevel) + '</span>' : '';
       const safetyNoteLine = c.safetyNote ? '<div class="card-safety-note">🛡 ' + escapeHtml(c.safetyNote) + '</div>' : '';
-      const vaccineBadge = c.yellowFeverStatus ? '<span class="badge badge-vaccine-' + c.yellowFeverStatus + '" title="黃熱病疫苗證明規定">💉 ' + YELLOW_FEVER_LABELS[c.yellowFeverStatus] + '</span>' : '';
+      const vaccineBadge = c.yellowFeverStatus ? '<span class="badge badge-vaccine-' + escapeHtml(c.yellowFeverStatus) + '" title="黃熱病疫苗證明規定">💉 ' + escapeHtml(YELLOW_FEVER_LABELS[c.yellowFeverStatus] || c.yellowFeverStatus) + '</span>' : '';
       const healthNoteLine = c.healthNote ? '<div class="card-health-note">💉 ' + escapeHtml(c.healthNote) + '</div>' : '';
       const heritageCount = c.heritageSites ? c.heritageSites.length : 0;
       const heritageBadge = heritageCount ? '<span class="badge badge-heritage" title="UNESCO 世界遺產">🏛 ' + heritageCount + '</span>' : '';
@@ -993,7 +1034,7 @@ import { createClient } from '@supabase/supabase-js';
           '<div class="card-top">' +
             '<div><div class="card-name">' + flagImg(c.id) + escapeHtml(c.name) + '</div>' +
             (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + '</div>' : '') + '</div>' +
-            '<div class="card-badges">' + passportBadge + '<span class="badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</span>' + safetyBadge + heritageBadge + vaccineBadge + '</div>' +
+            '<div class="card-badges">' + passportBadge + '<span class="badge badge-' + escapeHtml(c.visaType) + '">' + escapeHtml(VISA_LABELS[c.visaType] || c.visaType) + '</span>' + safetyBadge + heritageBadge + vaccineBadge + '</div>' +
           '</div>' +
           '<div class="card-meta">' + metaBits.map(function (b) { return '<span>' + escapeHtml(b) + '</span>'; }).join('') + '</div>' +
           powerLine +
@@ -2257,10 +2298,10 @@ import { createClient } from '@supabase/supabase-js';
       tooltip.innerHTML =
         '<div class="tt-name">' + flagImg(c.id) + escapeHtml(c.name) + '</div>' +
         (c.passportNotRecognized ? '<div class="tt-badge badge-passport-blocked">🚫 不承認台灣護照</div>' : '') +
-        '<div class="tt-badge badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + '</div>' +
-        (c.stayDays ? '<div>可停留 ' + c.stayDays + ' 天</div>' : '') +
+        '<div class="tt-badge badge badge-' + escapeHtml(c.visaType) + '">' + escapeHtml(VISA_LABELS[c.visaType] || c.visaType) + '</div>' +
+        (c.stayDays ? '<div>可停留 ' + escapeHtml(c.stayDays) + ' 天</div>' : '') +
         (fee ? '<div>' + escapeHtml(fee) + '</div>' : '') +
-        (c.safetyLevel ? '<div class="tt-badge safety-badge-' + c.safetyLevel + '">🛡 ' + SAFETY_LABELS[c.safetyLevel] + '</div>' : '') +
+        (c.safetyLevel ? '<div class="tt-badge safety-badge-' + escapeHtml(c.safetyLevel) + '">🛡 ' + escapeHtml(SAFETY_LABELS[c.safetyLevel] || c.safetyLevel) + '</div>' : '') +
         (heritageCount ? '<div class="tt-badge badge-heritage">🏛 ' + heritageCount + ' 項世界遺產</div>' : '');
       tooltip.hidden = false;
       positionTooltip(e);
@@ -2792,7 +2833,7 @@ import { createClient } from '@supabase/supabase-js';
       } else if (c.visaType !== 'visa_free') {
         hasUnknown = true;
       }
-      return '<tr><td>' + escapeHtml(c.name) + '</td><td>' + (VISA_LABELS[c.visaType] || c.visaType) + '</td>' +
+      return '<tr><td>' + escapeHtml(c.name) + '</td><td>' + escapeHtml(VISA_LABELS[c.visaType] || c.visaType) + '</td>' +
         '<td class="num">' + escapeHtml(origText) + '</td><td class="num">' + (converted !== null ? home + ' ' + fmtMoney(converted) : '–') + '</td></tr>';
     }).join('');
     body.innerHTML = rows;

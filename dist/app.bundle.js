@@ -25267,11 +25267,35 @@ ${suffix}`;
         emergencyCard: { insurerName: "", insurerPhone: "", medicalNote: "", passportNo: "", cards: [], contacts: [] }
       };
     }
+    function sanitizeEnumField(value, validValues, fallback) {
+      return validValues.indexOf(value) !== -1 ? value : fallback;
+    }
+    function sanitizeCountryFields(fields) {
+      if (!fields || typeof fields !== "object") return fields;
+      const out = Object.assign({}, fields);
+      if ("visaType" in out) out.visaType = sanitizeEnumField(out.visaType, Object.keys(VISA_LABELS), "visa_required");
+      if ("safetyLevel" in out) out.safetyLevel = out.safetyLevel == null ? null : sanitizeEnumField(out.safetyLevel, Object.keys(SAFETY_LABELS), null);
+      if ("yellowFeverStatus" in out) out.yellowFeverStatus = out.yellowFeverStatus == null ? null : sanitizeEnumField(out.yellowFeverStatus, Object.keys(YELLOW_FEVER_LABELS), null);
+      if ("region" in out) out.region = sanitizeEnumField(out.region, Object.keys(REGION_LABELS), "asia");
+      if ("stayDays" in out) out.stayDays = out.stayDays == null ? null : Number(out.stayDays) || null;
+      if ("fee" in out) out.fee = out.fee == null ? null : Number(out.fee) || null;
+      return out;
+    }
     function mergeState(defaults, saved) {
       const merged = Object.assign({}, defaults, saved || {});
       ["checklist", "budget", "emergencyCard"].forEach(function(key) {
         merged[key] = Object.assign({}, defaults[key], saved && saved[key] || {});
       });
+      if (Array.isArray(merged.customCountries)) {
+        merged.customCountries = merged.customCountries.map(sanitizeCountryFields);
+      }
+      if (merged.overrides && typeof merged.overrides === "object") {
+        const sanitizedOverrides = {};
+        Object.keys(merged.overrides).forEach(function(id) {
+          sanitizedOverrides[id] = sanitizeCountryFields(merged.overrides[id]);
+        });
+        merged.overrides = sanitizedOverrides;
+      }
       return merged;
     }
     function migrateRoute(route) {
@@ -25733,7 +25757,8 @@ ${suffix}`;
       return rows;
     }
     function csvField(v) {
-      const s = String(v == null ? "" : v);
+      let s = String(v == null ? "" : v);
+      if (/^[=+\-@]/.test(s)) s = "'" + s;
       return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
     }
     function buildGoogleMyMapsCsv(rows) {
@@ -26063,16 +26088,16 @@ ${suffix}`;
         const seasonLine = c.bestSeason ? '<div class="card-season">\u2600\uFE0F ' + escapeHtml(c.bestSeason) + "</div>" : "";
         const highlighted = c.id === selectedId ? " highlighted" : "";
         const passportBadge = c.passportNotRecognized ? '<span class="badge badge-passport-blocked" title="\u8A72\u570B\u4E0D\u627F\u8A8D\u4E2D\u83EF\u6C11\u570B\u8B77\u7167\uFF0C\u51FA\u767C\u524D\u52D9\u5FC5\u5411\u8A72\u570B\u99D0\u5916\u6A5F\u69CB\u6216\u5916\u4EA4\u90E8\u67E5\u8B49">\u{1F6AB} \u4E0D\u627F\u8A8D\u53F0\u7063\u8B77\u7167</span>' : "";
-        const safetyBadge = c.safetyLevel ? '<span class="badge safety-badge-' + c.safetyLevel + '">\u{1F6E1} ' + SAFETY_LABELS[c.safetyLevel] + "</span>" : "";
+        const safetyBadge = c.safetyLevel ? '<span class="badge safety-badge-' + escapeHtml(c.safetyLevel) + '">\u{1F6E1} ' + escapeHtml(SAFETY_LABELS[c.safetyLevel] || c.safetyLevel) + "</span>" : "";
         const safetyNoteLine = c.safetyNote ? '<div class="card-safety-note">\u{1F6E1} ' + escapeHtml(c.safetyNote) + "</div>" : "";
-        const vaccineBadge = c.yellowFeverStatus ? '<span class="badge badge-vaccine-' + c.yellowFeverStatus + '" title="\u9EC3\u71B1\u75C5\u75AB\u82D7\u8B49\u660E\u898F\u5B9A">\u{1F489} ' + YELLOW_FEVER_LABELS[c.yellowFeverStatus] + "</span>" : "";
+        const vaccineBadge = c.yellowFeverStatus ? '<span class="badge badge-vaccine-' + escapeHtml(c.yellowFeverStatus) + '" title="\u9EC3\u71B1\u75C5\u75AB\u82D7\u8B49\u660E\u898F\u5B9A">\u{1F489} ' + escapeHtml(YELLOW_FEVER_LABELS[c.yellowFeverStatus] || c.yellowFeverStatus) + "</span>" : "";
         const healthNoteLine = c.healthNote ? '<div class="card-health-note">\u{1F489} ' + escapeHtml(c.healthNote) + "</div>" : "";
         const heritageCount = c.heritageSites ? c.heritageSites.length : 0;
         const heritageBadge = heritageCount ? '<span class="badge badge-heritage" title="UNESCO \u4E16\u754C\u907A\u7522">\u{1F3DB} ' + heritageCount + "</span>" : "";
         const heritageDetail = heritageCount ? '<details class="card-heritage"><summary>\u{1F3DB} ' + heritageCount + ' \u9805\u4E16\u754C\u907A\u7522</summary><ul class="heritage-list">' + c.heritageSites.map(function(s) {
           return "<li>" + escapeHtml(s) + "</li>";
         }).join("") + "</ul></details>" : "";
-        return '<div class="country-card' + highlighted + '" data-id="' + c.id + '"><div class="card-top"><div><div class="card-name">' + flagImg(c.id) + escapeHtml(c.name) + "</div>" + (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + "</div>" : "") + '</div><div class="card-badges">' + passportBadge + '<span class="badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + "</span>" + safetyBadge + heritageBadge + vaccineBadge + '</div></div><div class="card-meta">' + metaBits.map(function(b) {
+        return '<div class="country-card' + highlighted + '" data-id="' + c.id + '"><div class="card-top"><div><div class="card-name">' + flagImg(c.id) + escapeHtml(c.name) + "</div>" + (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + "</div>" : "") + '</div><div class="card-badges">' + passportBadge + '<span class="badge badge-' + escapeHtml(c.visaType) + '">' + escapeHtml(VISA_LABELS[c.visaType] || c.visaType) + "</span>" + safetyBadge + heritageBadge + vaccineBadge + '</div></div><div class="card-meta">' + metaBits.map(function(b) {
           return "<span>" + escapeHtml(b) + "</span>";
         }).join("") + "</div>" + powerLine + driveLine + seasonLine + note + safetyNoteLine + healthNoteLine + personal + heritageDetail + '<div class="card-bottom"><select class="status-select" data-action="status" data-id="' + c.id + '">' + Object.keys(STATUS_LABELS).map(function(k) {
           return '<option value="' + k + '"' + (k === status ? " selected" : "") + ">" + STATUS_LABELS[k] + "</option>";
@@ -27117,7 +27142,7 @@ ${suffix}`;
         }
         const fee = formatFee(c);
         const heritageCount = c.heritageSites ? c.heritageSites.length : 0;
-        tooltip.innerHTML = '<div class="tt-name">' + flagImg(c.id) + escapeHtml(c.name) + "</div>" + (c.passportNotRecognized ? '<div class="tt-badge badge-passport-blocked">\u{1F6AB} \u4E0D\u627F\u8A8D\u53F0\u7063\u8B77\u7167</div>' : "") + '<div class="tt-badge badge badge-' + c.visaType + '">' + VISA_LABELS[c.visaType] + "</div>" + (c.stayDays ? "<div>\u53EF\u505C\u7559 " + c.stayDays + " \u5929</div>" : "") + (fee ? "<div>" + escapeHtml(fee) + "</div>" : "") + (c.safetyLevel ? '<div class="tt-badge safety-badge-' + c.safetyLevel + '">\u{1F6E1} ' + SAFETY_LABELS[c.safetyLevel] + "</div>" : "") + (heritageCount ? '<div class="tt-badge badge-heritage">\u{1F3DB} ' + heritageCount + " \u9805\u4E16\u754C\u907A\u7522</div>" : "");
+        tooltip.innerHTML = '<div class="tt-name">' + flagImg(c.id) + escapeHtml(c.name) + "</div>" + (c.passportNotRecognized ? '<div class="tt-badge badge-passport-blocked">\u{1F6AB} \u4E0D\u627F\u8A8D\u53F0\u7063\u8B77\u7167</div>' : "") + '<div class="tt-badge badge badge-' + escapeHtml(c.visaType) + '">' + escapeHtml(VISA_LABELS[c.visaType] || c.visaType) + "</div>" + (c.stayDays ? "<div>\u53EF\u505C\u7559 " + escapeHtml(c.stayDays) + " \u5929</div>" : "") + (fee ? "<div>" + escapeHtml(fee) + "</div>" : "") + (c.safetyLevel ? '<div class="tt-badge safety-badge-' + escapeHtml(c.safetyLevel) + '">\u{1F6E1} ' + escapeHtml(SAFETY_LABELS[c.safetyLevel] || c.safetyLevel) + "</div>" : "") + (heritageCount ? '<div class="tt-badge badge-heritage">\u{1F3DB} ' + heritageCount + " \u9805\u4E16\u754C\u907A\u7522</div>" : "");
         tooltip.hidden = false;
         positionTooltip(e);
       });
@@ -27604,7 +27629,7 @@ ${suffix}`;
         } else if (c.visaType !== "visa_free") {
           hasUnknown = true;
         }
-        return "<tr><td>" + escapeHtml(c.name) + "</td><td>" + (VISA_LABELS[c.visaType] || c.visaType) + '</td><td class="num">' + escapeHtml(origText) + '</td><td class="num">' + (converted !== null ? home + " " + fmtMoney(converted) : "\u2013") + "</td></tr>";
+        return "<tr><td>" + escapeHtml(c.name) + "</td><td>" + escapeHtml(VISA_LABELS[c.visaType] || c.visaType) + '</td><td class="num">' + escapeHtml(origText) + '</td><td class="num">' + (converted !== null ? home + " " + fmtMoney(converted) : "\u2013") + "</td></tr>";
       }).join("");
       body.innerHTML = rows;
       document.getElementById("feeTotal").textContent = home + " " + fmtMoney(total) + (hasUnknown ? "\uFF08\u5C1A\u6709\u8CBB\u7528\u5F85\u67E5\u8B49\uFF0C\u672A\u8A08\u5165\uFF09" : "");
