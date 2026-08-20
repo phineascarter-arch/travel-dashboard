@@ -25281,6 +25281,14 @@ ${suffix}`;
       if ("fee" in out) out.fee = out.fee == null ? null : Number(out.fee) || null;
       return out;
     }
+    function sanitizeBudgetRow(sb) {
+      if (!sb || typeof sb !== "object") return sb;
+      const out = Object.assign({}, sb);
+      ["nights", "accom", "daily", "transport"].forEach(function(field) {
+        if (field in out) out[field] = out[field] == null || out[field] === "" ? null : Number(out[field]) || null;
+      });
+      return out;
+    }
     function mergeState(defaults, saved) {
       const merged = Object.assign({}, defaults, saved || {});
       ["checklist", "budget", "emergencyCard"].forEach(function(key) {
@@ -25295,6 +25303,24 @@ ${suffix}`;
           sanitizedOverrides[id] = sanitizeCountryFields(merged.overrides[id]);
         });
         merged.overrides = sanitizedOverrides;
+      }
+      if (merged.budget && merged.budget.perStop && typeof merged.budget.perStop === "object") {
+        const sanitizedPerStop = {};
+        Object.keys(merged.budget.perStop).forEach(function(id) {
+          sanitizedPerStop[id] = sanitizeBudgetRow(merged.budget.perStop[id]);
+        });
+        merged.budget = Object.assign({}, merged.budget, { perStop: sanitizedPerStop });
+      }
+      if (merged.cities && typeof merged.cities === "object") {
+        const sanitizedCities = {};
+        Object.keys(merged.cities).forEach(function(stopId) {
+          const list = merged.cities[stopId];
+          sanitizedCities[stopId] = Array.isArray(list) ? list.map(function(c) {
+            if (!c || typeof c !== "object") return c;
+            return Object.assign({}, c, { nights: c.nights == null || c.nights === "" ? null : Number(c.nights) || null });
+          }) : list;
+        });
+        merged.cities = sanitizedCities;
       }
       return merged;
     }
