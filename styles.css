@@ -27,12 +27,28 @@
 
 * { box-sizing: border-box; }
 
+/* Flex/grid items default to min-width/min-height: auto, meaning "never shrink below my
+   content's intrinsic size" — that's what actually causes the recurring "child pushes its
+   flex/grid container wider than the viewport" overflow bug in this app (found and patched one
+   spot at a time in several places already: .panel, .checklist-columns > *, the fee-row modal
+   field, etc.). Resetting it here once, globally, covers every flex/grid item in the app instead
+   of needing a new per-component patch every time a new one is built — for a plain block/inline
+   element (the overwhelming majority of this selector's matches) auto and 0 render identically,
+   this only actually changes anything for the flex/grid-item cases where it's the fix. */
+* { min-width: 0; min-height: 0; }
+
 body {
   margin: 0;
   font-family: var(--sans);
   background: var(--bg);
   color: var(--text);
   position: relative;
+  /* Inherited, so setting it once here covers every element: a single long word with no spaces
+     (a UNESCO site name, an unhyphenated English country name) can't wrap under the CSS default
+     even once its box is free to shrink — only breaking mid-word can stop it overflowing that
+     box. Same recurring bug as the min-width one above, fixed the same way (once, globally,
+     instead of a new per-component patch each time a fresh instance of it turns up). */
+  overflow-wrap: break-word;
   background-image:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
@@ -41,7 +57,7 @@ body {
   align-items: stretch;
 }
 
-.app-main { flex: 1; min-width: 0; }
+.app-main { flex: 1; }
 
 body::after {
   content: "";
@@ -186,6 +202,15 @@ a { color: var(--gold-bright); }
   .side-nav-brand { display: none; }
   .tab-btn { flex-direction: column; gap: 2px; padding: 8px 12px; }
   .side-nav-sync { margin-top: 0; padding-top: 0; border-top: none; flex-direction: row; }
+  /* This row is deliberately allowed to overflow and scroll horizontally (overflow-x: auto
+     above) rather than shrink to fit — the global `min-width: 0` reset doesn't know that and
+     squeezes every button down to nothing. Restoring min-width: auto alone isn't enough to fix
+     it either: CJK text can wrap between any two characters even without a space, so its
+     "min-content" width is barely more than a single character — nowhere near enough to stop
+     the squeeze. white-space: nowrap on the label is what actually keeps each button a sane
+     single-line width; the row then overflows sideways exactly as overflow-x: auto intends. */
+  .side-nav * { min-width: auto; min-height: auto; }
+  .tab-btn span:last-child, .side-nav-sync .btn { white-space: nowrap; }
 }
 .currency-panel { margin-bottom: 24px; }
 .currency-panel:last-child { margin-bottom: 0; }
@@ -206,12 +231,6 @@ a { color: var(--gold-bright); }
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 16px;
-  /* Grid items default to min-width: auto, i.e. "never shrink below my content's intrinsic
-     width" — so a wide-enough child (a fixed-width input, a long unwrapped line) pushes the
-     whole panel past its grid track's width instead of wrapping inside it. Every tab is a
-     direct child of the .layout grid, so this alone was the root cause of horizontal overflow
-     showing up across almost every tab on narrow screens. */
-  min-width: 0;
 }
 
 /* ---------- toolbar ---------- */
@@ -610,7 +629,7 @@ a { color: var(--gold-bright); }
 .city-chip .city-remove { border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 0.8rem; padding: 2px 6px; }
 .city-chip .city-remove:hover { color: var(--c-restricted); }
 .city-add-row { display: flex; gap: 4px; }
-.city-add-row .city-name-input { flex: 1; min-width: 0; }
+.city-add-row .city-name-input { flex: 1; }
 .city-add-row .city-nights-input { width: 56px; }
 .city-add-row input {
   font-family: var(--mono); font-size: 0.84rem; padding: 4px 6px;
@@ -631,7 +650,7 @@ a { color: var(--gold-bright); }
 .route-item .date-row input[type="date"] {
   font-family: var(--mono); font-size: 0.82rem; padding: 3px 4px; border-radius: 3px;
   border: 1px solid var(--border); background: var(--bg-input); color: var(--text); color-scheme: dark;
-  min-width: 0; flex: 1;
+  flex: 1;
 }
 .route-item .date-sep { color: var(--text-dim); font-size: 0.82rem; }
 .stay-warning { flex: 1 1 100%; font-size: 0.8rem; color: var(--c-restricted); font-family: var(--mono); margin-top: 2px; }
@@ -758,7 +777,7 @@ a { color: var(--gold-bright); }
   z-index: 1;
 }
 
-.activity-body { flex: 1; min-width: 0; }
+.activity-body { flex: 1; }
 .activity-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
 .activity-name { font-size: 1.08rem; font-weight: 700; color: var(--text); }
 .activity-name .visit-label { font-size: 0.82rem; color: var(--text-dim); font-weight: 400; }
@@ -785,7 +804,6 @@ a { color: var(--gold-bright); }
 .checklist-summary { font-family: var(--mono); font-size: 0.86rem; color: var(--text-dim); }
 
 .checklist-columns { display: grid; grid-template-columns: 260px 1fr; gap: 20px; }
-.checklist-columns > * { min-width: 0; }
 @media (max-width: 700px) { .checklist-columns { grid-template-columns: 1fr; } }
 
 .checklist-col h3 { margin: 0 0 8px; font-family: var(--mono); font-size: 0.92rem; color: var(--text-dim); letter-spacing: 0.5px; font-weight: 600; }
@@ -872,10 +890,10 @@ a { color: var(--gold-bright); }
   padding: 6px 8px; border: 1px dashed var(--border); border-radius: 4px;
   background: var(--bg-input); color: var(--text); font-family: var(--mono); font-size: 0.88rem;
 }
-.saved-map-item-editing .map-edit-city { flex: 1 1 100px; min-width: 0; }
-.saved-map-item-editing .map-edit-category { flex: 1 1 100px; min-width: 0; }
-.saved-map-item-editing .map-edit-label { flex: 1 1 130px; min-width: 0; }
-.saved-map-item-editing .map-edit-url { flex: 2 1 200px; min-width: 0; }
+.saved-map-item-editing .map-edit-city { flex: 1 1 100px; }
+.saved-map-item-editing .map-edit-category { flex: 1 1 100px; }
+.saved-map-item-editing .map-edit-label { flex: 1 1 130px; }
+.saved-map-item-editing .map-edit-url { flex: 2 1 200px; }
 
 .saved-map-bulk-row { margin-top: 6px; }
 .map-bulk-textarea {
@@ -901,10 +919,10 @@ a { color: var(--gold-bright); }
 .map-category-badge.cat-other { color: var(--text-dim); }
 
 .saved-map-add-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
-.saved-map-add-row .map-city-input { flex: 1 1 110px; min-width: 0; }
-.saved-map-add-row .map-category-input { flex: 1 1 110px; min-width: 0; }
-.saved-map-add-row .map-label-input { flex: 1 1 140px; min-width: 0; }
-.saved-map-add-row .map-url-input { flex: 2 1 220px; min-width: 0; }
+.saved-map-add-row .map-city-input { flex: 1 1 110px; }
+.saved-map-add-row .map-category-input { flex: 1 1 110px; }
+.saved-map-add-row .map-label-input { flex: 1 1 140px; }
+.saved-map-add-row .map-url-input { flex: 2 1 220px; }
 .saved-map-add-row input, .saved-map-add-row select {
   padding: 6px 8px; border: 1px dashed var(--border); border-radius: 4px;
   background: var(--bg-input); color: var(--text-dim); font-family: var(--mono); font-size: 0.88rem;
@@ -1061,7 +1079,7 @@ a { color: var(--gold-bright); }
 .timeline-panel .timeline-summary { color: #9a9ca3; font-family: var(--tlfont); font-size: 0.8rem; }
 
 .timeline-panel .timeline-stats { gap: 30px; }
-.timeline-panel .stat-card { background: transparent; border: none; box-shadow: none; padding: 0; min-width: 0; text-align: left; }
+.timeline-panel .stat-card { background: transparent; border: none; box-shadow: none; padding: 0; text-align: left; }
 .timeline-panel .stat-card .num { font-family: var(--tlfont); color: #f5f5f5; font-size: 1.5rem; font-weight: 700; text-shadow: none; }
 .timeline-panel .stat-card .label { font-family: var(--tlfont); color: #8a8c92; font-size: 0.86rem; text-transform: none; letter-spacing: 0; margin-top: 2px; }
 .timeline-panel .timeline-stats-note { color: #d6a44e; font-family: var(--tlfont); }
