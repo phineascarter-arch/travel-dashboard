@@ -156,11 +156,23 @@ import { createClient } from '@supabase/supabase-js';
   // '", safe only because a real <input type="date"> is what's assumed to have produced the
   // value — an imported/pulled state isn't constrained to that format at all.
   const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+  // Format-valid isn't the same as calendar-valid — "2026-02-30" matches DATE_RE, but
+  // new Date("2026-02-30T00:00:00") silently rolls over to March 2 instead of failing, and
+  // parseDay() (used for duration/sort/timeline math everywhere) has no way to tell the
+  // difference. Round-tripping the parsed date back to a string and comparing catches that:
+  // a real calendar date always survives the round trip unchanged, an overflowed one doesn't.
+  function isValidCalendarDate(str) {
+    if (!DATE_RE.test(str)) return false;
+    const d = new Date(str + 'T00:00:00');
+    if (isNaN(d.getTime())) return false;
+    const reformatted = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    return reformatted === str;
+  }
   function sanitizeScheduleEntry(sched) {
     if (!sched || typeof sched !== 'object') return sched;
     const out = Object.assign({}, sched);
     ['arrive', 'depart'].forEach(function (field) {
-      if (field in out && out[field] != null && !DATE_RE.test(out[field])) out[field] = null;
+      if (field in out && out[field] != null && !isValidCalendarDate(out[field])) out[field] = null;
     });
     return out;
   }

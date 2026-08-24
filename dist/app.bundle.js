@@ -25290,11 +25290,18 @@ ${suffix}`;
       return out;
     }
     const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+    function isValidCalendarDate(str) {
+      if (!DATE_RE.test(str)) return false;
+      const d = /* @__PURE__ */ new Date(str + "T00:00:00");
+      if (isNaN(d.getTime())) return false;
+      const reformatted = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      return reformatted === str;
+    }
     function sanitizeScheduleEntry(sched) {
       if (!sched || typeof sched !== "object") return sched;
       const out = Object.assign({}, sched);
       ["arrive", "depart"].forEach(function(field) {
-        if (field in out && out[field] != null && !DATE_RE.test(out[field])) out[field] = null;
+        if (field in out && out[field] != null && !isValidCalendarDate(out[field])) out[field] = null;
       });
       return out;
     }
