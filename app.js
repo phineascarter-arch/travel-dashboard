@@ -165,6 +165,15 @@ import { createClient } from '@supabase/supabase-js';
     return out;
   }
 
+  // renderMapsTab() and the export flattener both assume group.maps is always an array (city
+  // groups only ever get created via getOrCreateSavedMapCity(), which guarantees that) — not
+  // true for an imported/pulled state, where a hand-edited or corrupted maps:null/missing would
+  // otherwise throw on the first .length/.filter/.map call and blank out the whole tab.
+  function sanitizeSavedMapGroup(g) {
+    if (!g || typeof g !== 'object') return null;
+    return Object.assign({}, g, { maps: Array.isArray(g.maps) ? g.maps : [] });
+  }
+
   function mergeState(defaults, saved) {
     const merged = Object.assign({}, defaults, saved || {});
     ['checklist', 'budget', 'emergencyCard'].forEach(function (key) {
@@ -203,6 +212,14 @@ import { createClient } from '@supabase/supabase-js';
       const sanitizedSchedule = {};
       Object.keys(merged.schedule).forEach(function (id) { sanitizedSchedule[id] = sanitizeScheduleEntry(merged.schedule[id]); });
       merged.schedule = sanitizedSchedule;
+    }
+    if (merged.savedMaps && typeof merged.savedMaps === 'object') {
+      const sanitizedSavedMaps = {};
+      Object.keys(merged.savedMaps).forEach(function (countryId) {
+        const groups = merged.savedMaps[countryId];
+        sanitizedSavedMaps[countryId] = Array.isArray(groups) ? groups.map(sanitizeSavedMapGroup).filter(Boolean) : [];
+      });
+      merged.savedMaps = sanitizedSavedMaps;
     }
     // A handful of render sites (renderSavings among them) concatenate the home-currency code
     // in raw, trusting that it always came from the <select> populated with real currency codes

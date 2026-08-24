@@ -25298,6 +25298,10 @@ ${suffix}`;
       });
       return out;
     }
+    function sanitizeSavedMapGroup(g) {
+      if (!g || typeof g !== "object") return null;
+      return Object.assign({}, g, { maps: Array.isArray(g.maps) ? g.maps : [] });
+    }
     function mergeState(defaults, saved) {
       const merged = Object.assign({}, defaults, saved || {});
       ["checklist", "budget", "emergencyCard"].forEach(function(key) {
@@ -25337,6 +25341,14 @@ ${suffix}`;
           sanitizedSchedule[id] = sanitizeScheduleEntry(merged.schedule[id]);
         });
         merged.schedule = sanitizedSchedule;
+      }
+      if (merged.savedMaps && typeof merged.savedMaps === "object") {
+        const sanitizedSavedMaps = {};
+        Object.keys(merged.savedMaps).forEach(function(countryId) {
+          const groups = merged.savedMaps[countryId];
+          sanitizedSavedMaps[countryId] = Array.isArray(groups) ? groups.map(sanitizeSavedMapGroup).filter(Boolean) : [];
+        });
+        merged.savedMaps = sanitizedSavedMaps;
       }
       if (typeof merged.homeCurrency !== "string" || !/^[A-Za-z]{3}$/.test(merged.homeCurrency)) {
         merged.homeCurrency = defaults.homeCurrency;
