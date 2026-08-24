@@ -600,6 +600,14 @@ a { color: var(--gold-bright); }
 .route-hint { font-size: 0.86rem; color: var(--text-dim); font-family: var(--mono); }
 
 .route-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; }
+/* This list is meant to scroll once its content outgrows max-height — each .route-item should
+   keep its natural height and let the list grow a scrollbar. The global `min-height: 0` reset
+   (added to fix an unrelated horizontal-overflow bug) strips out the browser's automatic
+   "don't shrink below your content" protection for flex items, and here that protection is
+   exactly what stops a route item's schedule/city-list content from getting flex-shrunk down to
+   a sliver once several rich stops together exceed 46vh — restore it for this specific list,
+   the same way the mobile side-nav override already restores it for its own horizontal scroll. */
+.route-list > .route-item { min-height: auto; }
 .route-item { border: 1px solid var(--border); border-radius: 4px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; background: var(--bg-inset); }
 .route-item .order { font-weight: 700; font-family: var(--mono); font-size: 1rem; width: 20px; text-shadow: 0 0 6px currentColor; }
 .route-item .info { flex: 1; }
