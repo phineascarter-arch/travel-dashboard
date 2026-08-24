@@ -1156,9 +1156,15 @@ a { color: var(--gold-bright); }
 .timeline-panel .activity-warning { font-family: var(--tlfont); }
 .timeline-panel .empty-state { font-family: var(--tlfont); color: #6f7178; }
 
-/* scrollbars */
-.country-grid::-webkit-scrollbar, .route-list::-webkit-scrollbar, .modal::-webkit-scrollbar { width: 8px; }
-.country-grid::-webkit-scrollbar-thumb, .route-list::-webkit-scrollbar-thumb, .modal::-webkit-scrollbar-thumb {
+/* scrollbars — covers every internally-scrolling container (not the page scrollbar), both
+   vertical (width) and horizontal (height), so none of them fall back to the browser's
+   unstyled light-grey default track/thumb against this app's dark theme. */
+.country-grid::-webkit-scrollbar, .route-list::-webkit-scrollbar, .modal::-webkit-scrollbar, .side-nav::-webkit-scrollbar {
+  width: 8px; height: 8px;
+}
+.timeline-scroll::-webkit-scrollbar, .budget-scroll::-webkit-scrollbar { height: 8px; }
+.country-grid::-webkit-scrollbar-thumb, .route-list::-webkit-scrollbar-thumb, .modal::-webkit-scrollbar-thumb,
+.side-nav::-webkit-scrollbar-thumb, .timeline-scroll::-webkit-scrollbar-thumb, .budget-scroll::-webkit-scrollbar-thumb {
   background: var(--border-bright); border-radius: 4px;
 }
 
