@@ -1036,6 +1036,7 @@ a { color: var(--gold-bright); }
   padding: 8px 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-input); color: var(--text);
   font-family: var(--mono); font-size: 1rem; width: 160px;
 }
+.savings-row select { padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; background: var(--bg-input); color: var(--gold-bright); font-family: var(--mono); }
 .savings-gap { font-size: 1.1rem; font-weight: 700; }
 .savings-gap.ok { color: var(--c-free); }
 .savings-gap.short { color: var(--c-restricted); }
