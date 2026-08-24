@@ -26852,7 +26852,22 @@ ${suffix}`;
       renderAll();
     }
     function setStopDate(id, field, value) {
-      state.schedule[id] = Object.assign({}, state.schedule[id], {}, { [field]: value });
+      const current = state.schedule[id] || {};
+      const updated = Object.assign({}, current, { [field]: value });
+      if (field === "arrive" && value) {
+        const newArrive = parseDay(value);
+        const oldArrive = parseDay(current.arrive);
+        const oldDepart = parseDay(current.depart);
+        const departStillValid = updated.depart && parseDay(updated.depart) && parseDay(updated.depart) >= newArrive;
+        if (newArrive && !departStillValid) {
+          const hadValidRange = oldArrive && oldDepart && oldDepart >= oldArrive;
+          const nights = hadValidRange ? Math.round((oldDepart - oldArrive) / DAY_MS) : 1;
+          const newDepartDate = new Date(newArrive);
+          newDepartDate.setDate(newDepartDate.getDate() + nights);
+          updated.depart = newDepartDate.getFullYear() + "-" + String(newDepartDate.getMonth() + 1).padStart(2, "0") + "-" + String(newDepartDate.getDate()).padStart(2, "0");
+        }
+      }
+      state.schedule[id] = updated;
       saveState();
       renderStats();
       renderRoute();

@@ -1975,7 +1975,33 @@ import { createClient } from '@supabase/supabase-js';
   }
 
   function setStopDate(id, field, value) {
-    state.schedule[id] = Object.assign({}, state.schedule[id], {}, { [field]: value });
+    const current = state.schedule[id] || {};
+    const updated = Object.assign({}, current, { [field]: value });
+    // Moving arrival past the existing departure date (or past a still-empty one) leaves a
+    // silently-invalid range — stopDuration() just returns null for it, showing nothing rather
+    // than guiding the user toward a sane pair. Carry departure forward with it: keep whatever
+    // trip length was already set, or default to a 1-night stay if there wasn't a valid one yet.
+    if (field === 'arrive' && value) {
+      const newArrive = parseDay(value);
+      const oldArrive = parseDay(current.arrive);
+      const oldDepart = parseDay(current.depart);
+      const departStillValid = updated.depart && parseDay(updated.depart) && parseDay(updated.depart) >= newArrive;
+      if (newArrive && !departStillValid) {
+        const hadValidRange = oldArrive && oldDepart && oldDepart >= oldArrive;
+        const nights = hadValidRange ? Math.round((oldDepart - oldArrive) / DAY_MS) : 1;
+        // parseDay() builds these as local midnight (no timezone suffix), so shifting the date
+        // with setDate() and reading the local components back out keeps the same calendar date
+        // arithmetic parseDay/stopDuration already rely on. toISOString() would convert to UTC
+        // first — in any timezone ahead of UTC that silently shifts the result a day earlier
+        // (e.g. adding "1 night" to a UTC+8 midnight landed back on the same calendar day).
+        const newDepartDate = new Date(newArrive);
+        newDepartDate.setDate(newDepartDate.getDate() + nights);
+        updated.depart = newDepartDate.getFullYear() + '-' +
+          String(newDepartDate.getMonth() + 1).padStart(2, '0') + '-' +
+          String(newDepartDate.getDate()).padStart(2, '0');
+      }
+    }
+    state.schedule[id] = updated;
     saveState();
     renderStats();
     renderRoute();
