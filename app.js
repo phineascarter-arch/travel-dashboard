@@ -569,6 +569,43 @@ import { createClient } from '@supabase/supabase-js';
     renderRoute();
   }
 
+  function moveCity(stopId, cityId, dir) {
+    const list = state.cities[stopId];
+    if (!list) return;
+    const idx = list.findIndex(function (c) { return c.id === cityId; });
+    const swapWith = idx + dir;
+    if (idx === -1 || swapWith < 0 || swapWith >= list.length) return;
+    const tmp = list[idx];
+    list[idx] = list[swapWith];
+    list[swapWith] = tmp;
+    saveState();
+    renderRoute();
+  }
+
+  // Returns whether the edit actually saved (false on an empty name) so the caller only closes
+  // the edit form on success. A changed name invalidates whatever coordinates were geocoded for
+  // the old one — clearing geocodeAttempted too, not just geocodeStatus, is what actually lets
+  // ensureCityGeocoded() try again for this same city.id instead of silently never re-checking.
+  function updateCity(stopId, cityId, name, nights) {
+    const list = state.cities[stopId];
+    if (!list) return false;
+    const city = list.filter(function (c) { return c.id === cityId; })[0];
+    if (!city) return false;
+    const trimmedName = name.trim();
+    if (!trimmedName) return false;
+    if (trimmedName !== city.name) {
+      city.lat = null;
+      city.lng = null;
+      city.geocodeStatus = null;
+      geocodeAttempted.delete(cityId);
+    }
+    city.name = trimmedName;
+    city.nights = nights === '' || nights === null || nights === undefined ? null : Number(nights);
+    saveState();
+    renderRoute();
+    return true;
+  }
+
   // ---------- saved Google Maps links (per country, keyed by country id — not by route stop,
   // since a "My Maps" a user built while researching a country stays relevant across re-visits).
   // Grouped by city name within a country: state.savedMaps[countryId] = [{ id, cityName, maps:
@@ -1145,6 +1182,10 @@ import { createClient } from '@supabase/supabase-js';
     animate(grid.querySelectorAll('.country-card'), { opacity: [0, 1], y: [8, 0] }, { duration: 0.25, delay: stagger(0.03), ease: 'ease-out' });
   }
 
+  // Which city chip is showing its inline edit form right now — 'stopId:cityId', or null.
+  // UI-only, in-memory, not persisted, same pattern as the maps-collection's editingMapId.
+  let editingCityKey = null;
+
   function renderCitySectionHtml(stopId, stopDurationDays, country) {
     const cities = getCities(stopId);
     cities.forEach(function (c) { ensureCityGeocoded(stopId, c, country && country.id); });
@@ -1154,14 +1195,28 @@ import { createClient } from '@supabase/supabase-js';
     if (hasNights && stopDurationDays !== null && totalNights !== stopDurationDays) {
       mismatch = ' <span class="city-mismatch">（站點排定' + stopDurationDays + '天，城市合計' + totalNights + '晚）</span>';
     }
-    const chips = cities.map(function (c) {
+    const chips = cities.map(function (c, idx) {
+      if (editingCityKey === stopId + ':' + c.id) {
+        return '<span class="city-chip city-chip-editing" data-stop="' + stopId + '" data-city="' + c.id + '">' +
+          '<input type="text" class="city-edit-name" value="' + escapeHtml(c.name) + '" placeholder="城市名稱">' +
+          '<input type="number" class="city-edit-nights" min="0" value="' + (c.nights || '') + '" placeholder="晚數">' +
+          '<button type="button" class="btn btn-small" data-action="city-edit-save">儲存</button>' +
+          '<button type="button" class="btn btn-small btn-ghost" data-action="city-edit-cancel">取消</button>' +
+        '</span>';
+      }
       const geoIcon = c.geocodeStatus === 'ok' ? '<span class="city-geo ok" title="已定位，會用於距離估算">📍</span>'
         : c.geocodeStatus === 'pending' ? '<span class="city-geo pending" title="正在定位…">⋯</span>'
         : c.geocodeStatus === 'error' ? '<span class="city-geo error" title="找不到座標，暫用國家中心點估算距離">⚠</span>'
         : '';
-      return '<span class="city-chip">' + geoIcon + escapeHtml(c.name) +
+      return '<span class="city-chip">' +
+        '<span class="city-move-btns">' +
+          '<button type="button" class="city-move" data-action="city-move-up" data-stop="' + stopId + '" data-city="' + c.id + '"' + (idx === 0 ? ' disabled' : '') + '>▲</button>' +
+          '<button type="button" class="city-move" data-action="city-move-down" data-stop="' + stopId + '" data-city="' + c.id + '"' + (idx === cities.length - 1 ? ' disabled' : '') + '>▼</button>' +
+        '</span>' +
+        geoIcon + escapeHtml(c.name) +
         (c.nights ? ' <b>' + c.nights + '晚</b>' : '') +
-        '<button type="button" class="city-remove" data-action="city-remove" data-stop="' + stopId + '" data-city="' + c.id + '">✕</button></span>';
+        '<button type="button" class="city-edit" data-action="city-edit" data-stop="' + stopId + '" data-city="' + c.id + '" title="編輯">✎</button>' +
+        '<button type="button" class="city-remove" data-action="city-remove" data-stop="' + stopId + '" data-city="' + c.id + '" title="移除">✕</button></span>';
     }).join('');
 
     return (
@@ -2242,6 +2297,16 @@ import { createClient } from '@supabase/supabase-js';
     addCity(stopId, name, nightsInput.value);
   }
 
+  // Same "only close on success" reasoning as the maps-collection's saveMapEditFromLi: an empty
+  // name shouldn't silently discard whatever the user typed with no re-render to show why.
+  function saveCityEditFromChip(chip) {
+    const nameInput = chip.querySelector('.city-edit-name');
+    if (!nameInput || !nameInput.value.trim()) return false;
+    const saved = updateCity(chip.getAttribute('data-stop'), chip.getAttribute('data-city'), nameInput.value, chip.querySelector('.city-edit-nights').value);
+    if (saved) editingCityKey = null;
+    return saved;
+  }
+
   document.getElementById('routeList').addEventListener('click', function (e) {
     const btn = e.target.closest('[data-action]');
     if (!btn) return;
@@ -2252,9 +2317,20 @@ import { createClient } from '@supabase/supabase-js';
     if (action === 'remove-route') removeFromRoute(id);
     if (action === 'city-remove') removeCity(btn.getAttribute('data-stop'), btn.getAttribute('data-city'));
     if (action === 'city-add') addCityFromInputs(btn.getAttribute('data-stop'));
+    if (action === 'city-move-up') moveCity(btn.getAttribute('data-stop'), btn.getAttribute('data-city'), -1);
+    if (action === 'city-move-down') moveCity(btn.getAttribute('data-stop'), btn.getAttribute('data-city'), 1);
+    if (action === 'city-edit') { editingCityKey = btn.getAttribute('data-stop') + ':' + btn.getAttribute('data-city'); renderRoute(); }
+    if (action === 'city-edit-cancel') { editingCityKey = null; renderRoute(); }
+    if (action === 'city-edit-save') saveCityEditFromChip(btn.closest('.city-chip-editing'));
   });
 
   document.getElementById('routeList').addEventListener('keydown', function (e) {
+    const editingChip = e.target.closest('.city-chip-editing');
+    if (editingChip) {
+      if (e.key === 'Escape') { editingCityKey = null; renderRoute(); return; }
+      if (e.key === 'Enter') { e.preventDefault(); saveCityEditFromChip(editingChip); return; }
+      return;
+    }
     if (e.key !== 'Enter') return;
     const input = e.target.closest('.city-name-input, .city-nights-input');
     if (!input) return;

@@ -636,6 +636,24 @@ a { color: var(--gold-bright); }
 .city-geo.error { filter: grayscale(0.3); }
 .city-chip .city-remove { border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 0.8rem; padding: 2px 6px; }
 .city-chip .city-remove:hover { color: var(--c-restricted); }
+.city-chip .city-edit { border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 0.78rem; padding: 2px 4px; }
+.city-chip .city-edit:hover { color: var(--gold-bright); }
+.city-move-btns { display: flex; flex-direction: column; gap: 0; }
+.city-move { border: none; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 0.55rem; line-height: 1; padding: 0 2px; }
+.city-move:hover:not(:disabled) { color: var(--gold); }
+.city-move:disabled { opacity: 0.25; cursor: default; }
+
+.city-chip-editing {
+  display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  border: 1px solid var(--gold-dim); border-radius: 8px; padding: 4px 8px;
+  background: var(--bg-inset);
+}
+.city-chip-editing input {
+  font-family: var(--mono); font-size: 0.84rem; padding: 3px 6px;
+  border: 1px dashed var(--border); border-radius: 4px; background: var(--bg-input); color: var(--text);
+}
+.city-chip-editing .city-edit-name { flex: 1 1 100px; min-width: 0; }
+.city-chip-editing .city-edit-nights { width: 56px; }
 .city-add-row { display: flex; gap: 4px; }
 .city-add-row .city-name-input { flex: 1; }
 .city-add-row .city-nights-input { width: 56px; }
