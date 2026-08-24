@@ -1769,30 +1769,48 @@ import { createClient } from '@supabase/supabase-js';
     if (!listEl) return;
     const query = document.getElementById('mapsSearchInput').value.trim().toLowerCase();
 
-    let countries;
+    let entries; // [{ country, cityGroups }] — cityGroups pre-filtered down to what matched query
     if (query) {
-      countries = getAllCountries().filter(function (c) {
-        return c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || '').toLowerCase().indexOf(query) !== -1;
-      });
+      // Match against country name, city name, category label, and the user's own label
+      // (e.g. "河景飯店") so a search can land on a specific saved item, not just a country.
+      // A country whose own name matches is kept even with zero saved entries, so searching
+      // for a brand-new country to add a link to still works.
+      entries = getAllCountries().map(function (c) {
+        const nameMatches = c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || '').toLowerCase().indexOf(query) !== -1;
+        const cityGroups = getSavedMapCities(c.id).map(function (g) {
+          const maps = g.maps.filter(function (m) {
+            const cat = mapCategoryInfo(m.category);
+            const haystack = (c.name + ' ' + (c.nameEn || '') + ' ' + g.cityName + ' ' + cat.label + ' ' + m.label).toLowerCase();
+            return haystack.indexOf(query) !== -1;
+          });
+          return maps.length ? Object.assign({}, g, { maps: maps }) : null;
+        }).filter(Boolean);
+        if (!nameMatches && !cityGroups.length) return null;
+        return { country: c, cityGroups: cityGroups };
+      }).filter(Boolean);
     } else {
       // Nothing searched: only show countries that already have a saved link, so the list
       // isn't 152 empty sections by default — search is how you find a new one to add.
-      countries = Object.keys(state.savedMaps).map(function (id) { return findCountry(id); }).filter(Boolean);
+      entries = Object.keys(state.savedMaps).map(function (id) {
+        const c = findCountry(id);
+        return c ? { country: c, cityGroups: getSavedMapCities(id) } : null;
+      }).filter(Boolean);
     }
 
-    countries.sort(function (a, b) {
-      const ra = REGION_ORDER.indexOf(a.region), rb = REGION_ORDER.indexOf(b.region);
+    entries.sort(function (a, b) {
+      const ra = REGION_ORDER.indexOf(a.country.region), rb = REGION_ORDER.indexOf(b.country.region);
       if (ra !== rb) return ra - rb;
-      return a.name.localeCompare(b.name, 'zh-Hant');
+      return a.country.name.localeCompare(b.country.name, 'zh-Hant');
     });
 
-    if (!countries.length) {
+    if (!entries.length) {
       listEl.innerHTML = query
-        ? '<div class="empty-state">找不到符合的國家</div>'
+        ? '<div class="empty-state">找不到符合的國家、城市或地點</div>'
         : '<div class="empty-state">還沒有收藏任何地圖連結，上面搜尋國家後就可以新增。</div>';
     } else {
-      listEl.innerHTML = countries.map(function (c) {
-        const cityGroups = getSavedMapCities(c.id);
+      listEl.innerHTML = entries.map(function (entry) {
+        const c = entry.country;
+        const cityGroups = entry.cityGroups;
         const countryChecked = cityGroups.length > 0 && cityGroups.every(function (g) { return !mapsExportExcludedCities.has(g.id); });
         const citiesHtml = cityGroups.length
           ? cityGroups.map(function (g) {

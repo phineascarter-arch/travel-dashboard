@@ -26665,26 +26665,38 @@ ${suffix}`;
       const listEl = document.getElementById("mapsList");
       if (!listEl) return;
       const query = document.getElementById("mapsSearchInput").value.trim().toLowerCase();
-      let countries;
+      let entries;
       if (query) {
-        countries = getAllCountries().filter(function(c) {
-          return c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || "").toLowerCase().indexOf(query) !== -1;
-        });
+        entries = getAllCountries().map(function(c) {
+          const nameMatches = c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || "").toLowerCase().indexOf(query) !== -1;
+          const cityGroups = getSavedMapCities(c.id).map(function(g) {
+            const maps = g.maps.filter(function(m) {
+              const cat = mapCategoryInfo(m.category);
+              const haystack = (c.name + " " + (c.nameEn || "") + " " + g.cityName + " " + cat.label + " " + m.label).toLowerCase();
+              return haystack.indexOf(query) !== -1;
+            });
+            return maps.length ? Object.assign({}, g, { maps }) : null;
+          }).filter(Boolean);
+          if (!nameMatches && !cityGroups.length) return null;
+          return { country: c, cityGroups };
+        }).filter(Boolean);
       } else {
-        countries = Object.keys(state.savedMaps).map(function(id) {
-          return findCountry(id);
+        entries = Object.keys(state.savedMaps).map(function(id) {
+          const c = findCountry(id);
+          return c ? { country: c, cityGroups: getSavedMapCities(id) } : null;
         }).filter(Boolean);
       }
-      countries.sort(function(a, b) {
-        const ra = REGION_ORDER.indexOf(a.region), rb = REGION_ORDER.indexOf(b.region);
+      entries.sort(function(a, b) {
+        const ra = REGION_ORDER.indexOf(a.country.region), rb = REGION_ORDER.indexOf(b.country.region);
         if (ra !== rb) return ra - rb;
-        return a.name.localeCompare(b.name, "zh-Hant");
+        return a.country.name.localeCompare(b.country.name, "zh-Hant");
       });
-      if (!countries.length) {
-        listEl.innerHTML = query ? '<div class="empty-state">\u627E\u4E0D\u5230\u7B26\u5408\u7684\u570B\u5BB6</div>' : '<div class="empty-state">\u9084\u6C92\u6709\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u4E0A\u9762\u641C\u5C0B\u570B\u5BB6\u5F8C\u5C31\u53EF\u4EE5\u65B0\u589E\u3002</div>';
+      if (!entries.length) {
+        listEl.innerHTML = query ? '<div class="empty-state">\u627E\u4E0D\u5230\u7B26\u5408\u7684\u570B\u5BB6\u3001\u57CE\u5E02\u6216\u5730\u9EDE</div>' : '<div class="empty-state">\u9084\u6C92\u6709\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u4E0A\u9762\u641C\u5C0B\u570B\u5BB6\u5F8C\u5C31\u53EF\u4EE5\u65B0\u589E\u3002</div>';
       } else {
-        listEl.innerHTML = countries.map(function(c) {
-          const cityGroups = getSavedMapCities(c.id);
+        listEl.innerHTML = entries.map(function(entry) {
+          const c = entry.country;
+          const cityGroups = entry.cityGroups;
           const countryChecked = cityGroups.length > 0 && cityGroups.every(function(g) {
             return !mapsExportExcludedCities.has(g.id);
           });
