@@ -227,6 +227,27 @@ import { createClient } from '@supabase/supabase-js';
     });
   }
 
+  // Stable sort by arrival date — stops without a date yet sink to the end (in whatever
+  // relative order they were already in) rather than being scattered by an undefined
+  // comparison, since "no date" isn't a point in time to sort against. Ties (same date, or
+  // both undated) keep their existing relative order too, via the explicit idx fallback —
+  // that's what lets ▲▼ still mean something: reordering within a tie sticks, reordering
+  // across different dates just snaps back the next time this runs.
+  function sortRouteByDate(route, schedule) {
+    if (!Array.isArray(route)) return route;
+    return route
+      .map(function (stop, idx) { return { stop: stop, idx: idx }; })
+      .sort(function (a, b) {
+        const dateA = parseDay((schedule[a.stop.id] || {}).arrive);
+        const dateB = parseDay((schedule[b.stop.id] || {}).arrive);
+        if (dateA && dateB) return dateA - dateB;
+        if (dateA && !dateB) return -1;
+        if (!dateA && dateB) return 1;
+        return a.idx - b.idx;
+      })
+      .map(function (x) { return x.stop; });
+  }
+
   function loadState() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -234,6 +255,7 @@ import { createClient } from '@supabase/supabase-js';
       const parsed = JSON.parse(raw);
       const merged = mergeState(defaultState(), parsed);
       merged.route = migrateRoute(merged.route);
+      merged.route = sortRouteByDate(merged.route, merged.schedule);
       return merged;
     } catch (e) {
       return defaultState();
@@ -334,6 +356,7 @@ import { createClient } from '@supabase/supabase-js';
         if (cloudIsNewer) {
           state = mergeState(defaultState(), res.data.data);
           state.route = migrateRoute(state.route);
+          state.route = sortRouteByDate(state.route, state.schedule);
           saveState({ skipCloudPush: true });
           setSyncMeta({ lastPushedAt: res.data.updated_at });
           renderAll();
@@ -2002,6 +2025,7 @@ import { createClient } from '@supabase/supabase-js';
       }
     }
     state.schedule[id] = updated;
+    state.route = sortRouteByDate(state.route, state.schedule);
     saveState();
     renderStats();
     renderRoute();
@@ -2015,6 +2039,11 @@ import { createClient } from '@supabase/supabase-js';
     const tmp = state.route[idx];
     state.route[idx] = state.route[swapWith];
     state.route[swapWith] = tmp;
+    // Re-sorting immediately after the swap means ▲▼ only "sticks" for stops that are actually
+    // tied (same date, or both undated) — nudging a stop past a differently-dated neighbor snaps
+    // right back, instead of leaving a manually-forced order that the next date edit would only
+    // silently correct later.
+    state.route = sortRouteByDate(state.route, state.schedule);
     saveState();
     renderRoute();
   }
@@ -2299,6 +2328,7 @@ import { createClient } from '@supabase/supabase-js';
         if (!confirm('匯入將會覆蓋目前的資料，確定要繼續嗎？')) return;
         state = mergeState(defaultState(), parsed);
         state.route = migrateRoute(state.route);
+        state.route = sortRouteByDate(state.route, state.schedule);
         saveState();
         renderAll();
       } catch (err) {

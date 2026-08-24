@@ -25350,6 +25350,21 @@ ${suffix}`;
         return entry;
       });
     }
+    function sortRouteByDate(route, schedule) {
+      if (!Array.isArray(route)) return route;
+      return route.map(function(stop, idx) {
+        return { stop, idx };
+      }).sort(function(a, b) {
+        const dateA = parseDay((schedule[a.stop.id] || {}).arrive);
+        const dateB = parseDay((schedule[b.stop.id] || {}).arrive);
+        if (dateA && dateB) return dateA - dateB;
+        if (dateA && !dateB) return -1;
+        if (!dateA && dateB) return 1;
+        return a.idx - b.idx;
+      }).map(function(x) {
+        return x.stop;
+      });
+    }
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY2);
@@ -25357,6 +25372,7 @@ ${suffix}`;
         const parsed = JSON.parse(raw);
         const merged = mergeState(defaultState(), parsed);
         merged.route = migrateRoute(merged.route);
+        merged.route = sortRouteByDate(merged.route, merged.schedule);
         return merged;
       } catch (e) {
         return defaultState();
@@ -25442,6 +25458,7 @@ ${suffix}`;
         if (cloudIsNewer) {
           state = mergeState(defaultState(), res.data.data);
           state.route = migrateRoute(state.route);
+          state.route = sortRouteByDate(state.route, state.schedule);
           saveState({ skipCloudPush: true });
           setSyncMeta({ lastPushedAt: res.data.updated_at });
           renderAll();
@@ -26868,6 +26885,7 @@ ${suffix}`;
         }
       }
       state.schedule[id] = updated;
+      state.route = sortRouteByDate(state.route, state.schedule);
       saveState();
       renderStats();
       renderRoute();
@@ -26880,6 +26898,7 @@ ${suffix}`;
       const tmp = state.route[idx];
       state.route[idx] = state.route[swapWith];
       state.route[swapWith] = tmp;
+      state.route = sortRouteByDate(state.route, state.schedule);
       saveState();
       renderRoute();
     }
@@ -27147,6 +27166,7 @@ ${suffix}`;
           if (!confirm("\u532F\u5165\u5C07\u6703\u8986\u84CB\u76EE\u524D\u7684\u8CC7\u6599\uFF0C\u78BA\u5B9A\u8981\u7E7C\u7E8C\u55CE\uFF1F")) return;
           state = mergeState(defaultState(), parsed);
           state.route = migrateRoute(state.route);
+          state.route = sortRouteByDate(state.route, state.schedule);
           saveState();
           renderAll();
         } catch (err) {
