@@ -624,11 +624,13 @@ import { createClient } from '@supabase/supabase-js';
   }
 
   // Which saved-map <li> is currently showing its inline edit form (null = none), which country's
-  // bulk-paste textarea is open (null = none), and which city groups are excluded from the next
-  // export — all three are UI-only, in-memory, not persisted state.
+  // bulk-paste textarea is open (null = none), which city groups are excluded from the next
+  // export, and each country's own city/category/name filter text (keyed by countryId) — all
+  // UI-only, in-memory, not persisted state.
   let editingMapId = null;
   let bulkPasteOpenCountry = null;
   let mapsExportExcludedCities = new Set();
+  let mapsCityFilterQuery = {};
 
   // Each line is either "名稱<TAB>網址" (a straight paste from a spreadsheet column) or just a
   // bare URL/URL-ish line with an optional label around it ("Some Cafe - https://maps.google...")
@@ -1769,49 +1771,53 @@ import { createClient } from '@supabase/supabase-js';
     if (!listEl) return;
     const query = document.getElementById('mapsSearchInput').value.trim().toLowerCase();
 
-    let entries; // [{ country, cityGroups }] — cityGroups pre-filtered down to what matched query
+    let countries;
     if (query) {
-      // Match against country name, city name, category label, and the user's own label
-      // (e.g. "河景飯店") so a search can land on a specific saved item, not just a country.
-      // A country whose own name matches is kept even with zero saved entries, so searching
-      // for a brand-new country to add a link to still works.
-      entries = getAllCountries().map(function (c) {
-        const nameMatches = c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || '').toLowerCase().indexOf(query) !== -1;
-        const cityGroups = getSavedMapCities(c.id).map(function (g) {
-          const maps = g.maps.filter(function (m) {
-            const cat = mapCategoryInfo(m.category);
-            const haystack = (c.name + ' ' + (c.nameEn || '') + ' ' + g.cityName + ' ' + cat.label + ' ' + m.label).toLowerCase();
-            return haystack.indexOf(query) !== -1;
-          });
-          return maps.length ? Object.assign({}, g, { maps: maps }) : null;
-        }).filter(Boolean);
-        if (!nameMatches && !cityGroups.length) return null;
-        return { country: c, cityGroups: cityGroups };
-      }).filter(Boolean);
+      countries = getAllCountries().filter(function (c) {
+        return c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || '').toLowerCase().indexOf(query) !== -1;
+      });
     } else {
       // Nothing searched: only show countries that already have a saved link, so the list
       // isn't 152 empty sections by default — search is how you find a new one to add.
-      entries = Object.keys(state.savedMaps).map(function (id) {
-        const c = findCountry(id);
-        return c ? { country: c, cityGroups: getSavedMapCities(id) } : null;
-      }).filter(Boolean);
+      countries = Object.keys(state.savedMaps).map(function (id) { return findCountry(id); }).filter(Boolean);
     }
 
-    entries.sort(function (a, b) {
-      const ra = REGION_ORDER.indexOf(a.country.region), rb = REGION_ORDER.indexOf(b.country.region);
+    countries.sort(function (a, b) {
+      const ra = REGION_ORDER.indexOf(a.region), rb = REGION_ORDER.indexOf(b.region);
       if (ra !== rb) return ra - rb;
-      return a.country.name.localeCompare(b.country.name, 'zh-Hant');
+      return a.name.localeCompare(b.name, 'zh-Hant');
     });
 
-    if (!entries.length) {
+    if (!countries.length) {
       listEl.innerHTML = query
-        ? '<div class="empty-state">找不到符合的國家、城市或地點</div>'
+        ? '<div class="empty-state">找不到符合的國家</div>'
         : '<div class="empty-state">還沒有收藏任何地圖連結，上面搜尋國家後就可以新增。</div>';
     } else {
-      listEl.innerHTML = entries.map(function (entry) {
-        const c = entry.country;
-        const cityGroups = entry.cityGroups;
-        const countryChecked = cityGroups.length > 0 && cityGroups.every(function (g) { return !mapsExportExcludedCities.has(g.id); });
+      listEl.innerHTML = countries.map(function (c) {
+        // The top search box only narrows which countries show (so a category like "住宿"
+        // doesn't pull in every country that has one); each country gets its own scoped
+        // filter underneath instead, so you pick the country first, then narrow within it.
+        const allCityGroups = getSavedMapCities(c.id);
+        const totalSavedMaps = allCityGroups.reduce(function (n, g) { return n + g.maps.length; }, 0);
+        const cityFilterQuery = (mapsCityFilterQuery[c.id] || '').trim().toLowerCase();
+        let cityGroups = allCityGroups;
+        let cityFilterActive = false;
+        if (cityFilterQuery && allCityGroups.length) {
+          cityFilterActive = true;
+          cityGroups = allCityGroups.map(function (g) {
+            const maps = g.maps.filter(function (m) {
+              const cat = mapCategoryInfo(m.category);
+              const haystack = (g.cityName + ' ' + cat.label + ' ' + m.label).toLowerCase();
+              return haystack.indexOf(cityFilterQuery) !== -1;
+            });
+            return maps.length ? Object.assign({}, g, { maps: maps }) : null;
+          }).filter(Boolean);
+        }
+        // Uses the full unfiltered set, not the possibly city-filtered `cityGroups` below —
+        // the export-country-check click handler always toggles every saved city for this
+        // country regardless of what the current filter is showing, so its checked state
+        // has to reflect that same full set or it'd visually lie about what a click does.
+        const countryChecked = allCityGroups.length > 0 && allCityGroups.every(function (g) { return !mapsExportExcludedCities.has(g.id); });
         const citiesHtml = cityGroups.length
           ? cityGroups.map(function (g) {
               const cityChecked = !mapsExportExcludedCities.has(g.id);
@@ -1848,13 +1854,16 @@ import { createClient } from '@supabase/supabase-js';
                 '</div>'
               );
             }).join('')
-          : '<div class="empty-state-small">尚未新增</div>';
+          : (cityFilterActive ? '<div class="empty-state-small">這個國家內找不到符合的城市／類別／名稱</div>' : '<div class="empty-state-small">尚未新增</div>');
         return (
           '<div class="saved-map-group" data-country="' + c.id + '">' +
             '<h4>' +
-              (cityGroups.length ? '<label class="maps-export-check" title="匯出時是否包含這個國家"><input type="checkbox" class="export-country-check" data-country="' + c.id + '"' + (countryChecked ? ' checked' : '') + '></label>' : '') +
+              (allCityGroups.length ? '<label class="maps-export-check" title="匯出時是否包含這個國家"><input type="checkbox" class="export-country-check" data-country="' + c.id + '"' + (countryChecked ? ' checked' : '') + '></label>' : '') +
               flagImg(c.id) + escapeHtml(c.name) +
             '</h4>' +
+            (totalSavedMaps > 1 || cityFilterActive
+              ? '<input type="search" class="map-city-filter" data-country="' + c.id + '" placeholder="搜尋這個國家的城市／類別／名稱…" value="' + escapeHtml(mapsCityFilterQuery[c.id] || '') + '">'
+              : '') +
             citiesHtml +
             '<div class="saved-map-add-row">' +
               '<input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="城市（例如：曼谷）">' +
@@ -1932,6 +1941,19 @@ import { createClient } from '@supabase/supabase-js';
   }
 
   document.getElementById('mapsSearchInput').addEventListener('input', renderMapsTab);
+  document.getElementById('mapsList').addEventListener('input', function (e) {
+    const filterInput = e.target.closest('.map-city-filter');
+    if (!filterInput) return;
+    // renderMapsTab() rebuilds this whole list from a fresh innerHTML string, which destroys
+    // and recreates this exact input — without restoring focus/cursor, every keystroke would
+    // knock focus out and force a re-click before the next character could be typed.
+    const countryId = filterInput.getAttribute('data-country');
+    const selStart = filterInput.selectionStart, selEnd = filterInput.selectionEnd;
+    mapsCityFilterQuery[countryId] = filterInput.value;
+    renderMapsTab();
+    const freshInput = document.querySelector('.map-city-filter[data-country="' + countryId + '"]');
+    if (freshInput) { freshInput.focus(); freshInput.setSelectionRange(selStart, selEnd); }
+  });
   document.getElementById('mapsList').addEventListener('click', function (e) {
     const removeBtn = e.target.closest('[data-action="map-remove"]');
     if (removeBtn) {

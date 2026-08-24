@@ -25720,6 +25720,7 @@ ${suffix}`;
     let editingMapId = null;
     let bulkPasteOpenCountry = null;
     let mapsExportExcludedCities = /* @__PURE__ */ new Set();
+    let mapsCityFilterQuery = {};
     function parseBulkMapLines(text) {
       const urlRe = /(https?:\/\/\S+|(?:www\.)?[a-z0-9-]+\.[a-z]{2,}(?:\/\S*)?)/i;
       return text.split(/\r?\n/).map(function(line) {
@@ -26665,39 +26666,44 @@ ${suffix}`;
       const listEl = document.getElementById("mapsList");
       if (!listEl) return;
       const query = document.getElementById("mapsSearchInput").value.trim().toLowerCase();
-      let entries;
+      let countries;
       if (query) {
-        entries = getAllCountries().map(function(c) {
-          const nameMatches = c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || "").toLowerCase().indexOf(query) !== -1;
-          const cityGroups = getSavedMapCities(c.id).map(function(g) {
-            const maps = g.maps.filter(function(m) {
-              const cat = mapCategoryInfo(m.category);
-              const haystack = (c.name + " " + (c.nameEn || "") + " " + g.cityName + " " + cat.label + " " + m.label).toLowerCase();
-              return haystack.indexOf(query) !== -1;
-            });
-            return maps.length ? Object.assign({}, g, { maps }) : null;
-          }).filter(Boolean);
-          if (!nameMatches && !cityGroups.length) return null;
-          return { country: c, cityGroups };
-        }).filter(Boolean);
+        countries = getAllCountries().filter(function(c) {
+          return c.name.toLowerCase().indexOf(query) !== -1 || (c.nameEn || "").toLowerCase().indexOf(query) !== -1;
+        });
       } else {
-        entries = Object.keys(state.savedMaps).map(function(id) {
-          const c = findCountry(id);
-          return c ? { country: c, cityGroups: getSavedMapCities(id) } : null;
+        countries = Object.keys(state.savedMaps).map(function(id) {
+          return findCountry(id);
         }).filter(Boolean);
       }
-      entries.sort(function(a, b) {
-        const ra = REGION_ORDER.indexOf(a.country.region), rb = REGION_ORDER.indexOf(b.country.region);
+      countries.sort(function(a, b) {
+        const ra = REGION_ORDER.indexOf(a.region), rb = REGION_ORDER.indexOf(b.region);
         if (ra !== rb) return ra - rb;
-        return a.country.name.localeCompare(b.country.name, "zh-Hant");
+        return a.name.localeCompare(b.name, "zh-Hant");
       });
-      if (!entries.length) {
-        listEl.innerHTML = query ? '<div class="empty-state">\u627E\u4E0D\u5230\u7B26\u5408\u7684\u570B\u5BB6\u3001\u57CE\u5E02\u6216\u5730\u9EDE</div>' : '<div class="empty-state">\u9084\u6C92\u6709\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u4E0A\u9762\u641C\u5C0B\u570B\u5BB6\u5F8C\u5C31\u53EF\u4EE5\u65B0\u589E\u3002</div>';
+      if (!countries.length) {
+        listEl.innerHTML = query ? '<div class="empty-state">\u627E\u4E0D\u5230\u7B26\u5408\u7684\u570B\u5BB6</div>' : '<div class="empty-state">\u9084\u6C92\u6709\u6536\u85CF\u4EFB\u4F55\u5730\u5716\u9023\u7D50\uFF0C\u4E0A\u9762\u641C\u5C0B\u570B\u5BB6\u5F8C\u5C31\u53EF\u4EE5\u65B0\u589E\u3002</div>';
       } else {
-        listEl.innerHTML = entries.map(function(entry) {
-          const c = entry.country;
-          const cityGroups = entry.cityGroups;
-          const countryChecked = cityGroups.length > 0 && cityGroups.every(function(g) {
+        listEl.innerHTML = countries.map(function(c) {
+          const allCityGroups = getSavedMapCities(c.id);
+          const totalSavedMaps = allCityGroups.reduce(function(n, g) {
+            return n + g.maps.length;
+          }, 0);
+          const cityFilterQuery = (mapsCityFilterQuery[c.id] || "").trim().toLowerCase();
+          let cityGroups = allCityGroups;
+          let cityFilterActive = false;
+          if (cityFilterQuery && allCityGroups.length) {
+            cityFilterActive = true;
+            cityGroups = allCityGroups.map(function(g) {
+              const maps = g.maps.filter(function(m) {
+                const cat = mapCategoryInfo(m.category);
+                const haystack = (g.cityName + " " + cat.label + " " + m.label).toLowerCase();
+                return haystack.indexOf(cityFilterQuery) !== -1;
+              });
+              return maps.length ? Object.assign({}, g, { maps }) : null;
+            }).filter(Boolean);
+          }
+          const countryChecked = allCityGroups.length > 0 && allCityGroups.every(function(g) {
             return !mapsExportExcludedCities.has(g.id);
           });
           const citiesHtml = cityGroups.length ? cityGroups.map(function(g) {
@@ -26710,8 +26716,8 @@ ${suffix}`;
               return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer"><span class="map-category-badge cat-' + cat.id + '">' + cat.icon + " " + escapeHtml(cat.label) + '</span><span class="saved-map-item-label">' + escapeHtml(m.label) + '</span></a><span class="saved-map-item-actions"><button type="button" class="map-edit" data-action="map-edit" data-id="' + m.id + '" title="\u7DE8\u8F2F">\u270E</button><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></span></li>';
             }).join("");
             return '<div class="saved-map-city"><h5 class="saved-map-city-name"><label class="maps-export-check" title="\u532F\u51FA\u6642\u662F\u5426\u5305\u542B\u9019\u500B\u57CE\u5E02"><input type="checkbox" class="export-city-check" data-country="' + c.id + '" data-city="' + g.id + '"' + (cityChecked ? " checked" : "") + "></label>\u{1F4CD} " + escapeHtml(g.cityName) + '</h5><ul class="saved-map-list">' + mapsHtml + "</ul></div>";
-          }).join("") : '<div class="empty-state-small">\u5C1A\u672A\u65B0\u589E</div>';
-          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + (cityGroups.length ? '<label class="maps-export-check" title="\u532F\u51FA\u6642\u662F\u5426\u5305\u542B\u9019\u500B\u570B\u5BB6"><input type="checkbox" class="export-country-check" data-country="' + c.id + '"' + (countryChecked ? " checked" : "") + "></label>" : "") + flagImg(c.id) + escapeHtml(c.name) + "</h4>" + citiesHtml + '<div class="saved-map-add-row"><input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="\u57CE\u5E02\uFF08\u4F8B\u5982\uFF1A\u66FC\u8C37\uFF09"><select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml() + '</select><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u6CB3\u666F\u98EF\u5E97\uFF0C\u53EF\u7559\u7A7A\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button><button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-toggle" data-country="' + c.id + '">\u{1F4CB} \u6279\u6B21\u8CBC\u4E0A</button></div>' + (bulkPasteOpenCountry === c.id ? '<div class="saved-map-bulk-row"><textarea class="map-bulk-textarea" data-country="' + c.id + '" rows="4" placeholder="\u6BCF\u884C\u4E00\u7B46\uFF0C\u683C\u5F0F\u300C\u540D\u7A31[Tab]\u7DB2\u5740\u300D\u6216\u76F4\u63A5\u8CBC\u7DB2\u5740\uFF08\u4E00\u884C\u4E00\u500B\uFF09\u3002\u4E0A\u9762\u9078\u7684\u57CE\u5E02\uFF0F\u5206\u985E\u6703\u5957\u7528\u5230\u6574\u6279\u3002"></textarea><div class="saved-map-bulk-actions"><button type="button" class="btn btn-small" data-action="map-bulk-add" data-country="' + c.id + '">\u6279\u6B21\u65B0\u589E</button><button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-cancel">\u53D6\u6D88</button></div></div>' : "") + "</div>";
+          }).join("") : cityFilterActive ? '<div class="empty-state-small">\u9019\u500B\u570B\u5BB6\u5167\u627E\u4E0D\u5230\u7B26\u5408\u7684\u57CE\u5E02\uFF0F\u985E\u5225\uFF0F\u540D\u7A31</div>' : '<div class="empty-state-small">\u5C1A\u672A\u65B0\u589E</div>';
+          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + (allCityGroups.length ? '<label class="maps-export-check" title="\u532F\u51FA\u6642\u662F\u5426\u5305\u542B\u9019\u500B\u570B\u5BB6"><input type="checkbox" class="export-country-check" data-country="' + c.id + '"' + (countryChecked ? " checked" : "") + "></label>" : "") + flagImg(c.id) + escapeHtml(c.name) + "</h4>" + (totalSavedMaps > 1 || cityFilterActive ? '<input type="search" class="map-city-filter" data-country="' + c.id + '" placeholder="\u641C\u5C0B\u9019\u500B\u570B\u5BB6\u7684\u57CE\u5E02\uFF0F\u985E\u5225\uFF0F\u540D\u7A31\u2026" value="' + escapeHtml(mapsCityFilterQuery[c.id] || "") + '">' : "") + citiesHtml + '<div class="saved-map-add-row"><input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="\u57CE\u5E02\uFF08\u4F8B\u5982\uFF1A\u66FC\u8C37\uFF09"><select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml() + '</select><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u6CB3\u666F\u98EF\u5E97\uFF0C\u53EF\u7559\u7A7A\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button><button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-toggle" data-country="' + c.id + '">\u{1F4CB} \u6279\u6B21\u8CBC\u4E0A</button></div>' + (bulkPasteOpenCountry === c.id ? '<div class="saved-map-bulk-row"><textarea class="map-bulk-textarea" data-country="' + c.id + '" rows="4" placeholder="\u6BCF\u884C\u4E00\u7B46\uFF0C\u683C\u5F0F\u300C\u540D\u7A31[Tab]\u7DB2\u5740\u300D\u6216\u76F4\u63A5\u8CBC\u7DB2\u5740\uFF08\u4E00\u884C\u4E00\u500B\uFF09\u3002\u4E0A\u9762\u9078\u7684\u57CE\u5E02\uFF0F\u5206\u985E\u6703\u5957\u7528\u5230\u6574\u6279\u3002"></textarea><div class="saved-map-bulk-actions"><button type="button" class="btn btn-small" data-action="map-bulk-add" data-country="' + c.id + '">\u6279\u6B21\u65B0\u589E</button><button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-cancel">\u53D6\u6D88</button></div></div>' : "") + "</div>";
         }).join("");
       }
       const savedCountryCount = Object.keys(state.savedMaps).length;
@@ -26764,6 +26770,19 @@ ${suffix}`;
       return true;
     }
     document.getElementById("mapsSearchInput").addEventListener("input", renderMapsTab);
+    document.getElementById("mapsList").addEventListener("input", function(e) {
+      const filterInput = e.target.closest(".map-city-filter");
+      if (!filterInput) return;
+      const countryId = filterInput.getAttribute("data-country");
+      const selStart = filterInput.selectionStart, selEnd = filterInput.selectionEnd;
+      mapsCityFilterQuery[countryId] = filterInput.value;
+      renderMapsTab();
+      const freshInput = document.querySelector('.map-city-filter[data-country="' + countryId + '"]');
+      if (freshInput) {
+        freshInput.focus();
+        freshInput.setSelectionRange(selStart, selEnd);
+      }
+    });
     document.getElementById("mapsList").addEventListener("click", function(e) {
       const removeBtn = e.target.closest('[data-action="map-remove"]');
       if (removeBtn) {
