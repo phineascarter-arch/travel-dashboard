@@ -26092,9 +26092,11 @@ ${suffix}`;
       if (diffMinutes === 0) {
         diffLabel = "\u8207\u53F0\u7063\u540C\u6642\u5340";
       } else {
-        const diffHours = Math.abs(diffMinutes) / 60;
-        const hoursLabel = Number.isInteger(diffHours) ? diffHours : diffHours.toFixed(1);
-        diffLabel = "\u6BD4\u53F0\u7063" + (diffMinutes > 0 ? "\u5FEB" : "\u6162") + hoursLabel + "\u5C0F\u6642";
+        const diffAbs = Math.abs(diffMinutes);
+        const h = Math.floor(diffAbs / 60);
+        const m = diffAbs % 60;
+        const timeLabel = m === 0 ? h + "\u5C0F\u6642" : h === 0 ? m + "\u5206" : h + "\u5C0F\u6642" + m + "\u5206";
+        diffLabel = "\u6BD4\u53F0\u7063" + (diffMinutes > 0 ? "\u5FEB" : "\u6162") + timeLabel;
       }
       return { timeStr, diffLabel };
     }

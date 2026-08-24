@@ -1050,9 +1050,15 @@ import { createClient } from '@supabase/supabase-js';
     if (diffMinutes === 0) {
       diffLabel = '與台灣同時區';
     } else {
-      const diffHours = Math.abs(diffMinutes) / 60;
-      const hoursLabel = Number.isInteger(diffHours) ? diffHours : diffHours.toFixed(1);
-      diffLabel = '比台灣' + (diffMinutes > 0 ? '快' : '慢') + hoursLabel + '小時';
+      // Decimal hours rounded to 1 place can't exactly represent a 15/45-minute offset (Nepal is
+      // UTC+5:45, a 2h15m difference from Taiwan) — (2.25).toFixed(1) even rounds the wrong way
+      // to "2.3" on top of that. Hours+minutes is exact for every real-world offset, quarter-hour
+      // ones included.
+      const diffAbs = Math.abs(diffMinutes);
+      const h = Math.floor(diffAbs / 60);
+      const m = diffAbs % 60;
+      const timeLabel = m === 0 ? (h + '小時') : (h === 0 ? (m + '分') : (h + '小時' + m + '分'));
+      diffLabel = '比台灣' + (diffMinutes > 0 ? '快' : '慢') + timeLabel;
     }
     return { timeStr: timeStr, diffLabel: diffLabel };
   }
