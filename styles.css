@@ -37,6 +37,16 @@
    this only actually changes anything for the flex/grid-item cases where it's the fix. */
 * { min-width: 0; min-height: 0; }
 
+/* Every <select> in the app has its closed state themed (dark background, gold border) via its
+   own selector, but that only ever covers the closed box — the dropdown's own option list is
+   separate browser-native chrome that a select's own background/color rules don't reach, so it
+   was falling back to each OS's default (white background, near-invisible light-grey text on
+   it) regardless of how dark the rest of the page is. Modern Chromium/Firefox do respect
+   background/color set directly on <option>, so styling it once here covers every select's
+   dropdown at once — older engines that don't support this just keep their current (unstyled)
+   behavior, no regression either way. */
+option { background: var(--bg-input); color: var(--text); }
+
 body {
   margin: 0;
   font-family: var(--sans);

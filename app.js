@@ -3409,10 +3409,10 @@ import { createClient } from '@supabase/supabase-js';
       }).join('');
     const emergencySection = emergencyRows
       ? '<h2>緊急聯絡資訊</h2>' +
-        '<table class="share-table">' +
+        '<div class="share-table-scroll"><table class="share-table">' +
           '<thead><tr><th>國家</th><th>當地報警/消防/救護車</th><th>台灣駐外代表處</th></tr></thead>' +
           '<tbody>' + emergencyRows + '</tbody>' +
-        '</table>'
+        '</table></div>'
       : '';
 
     const schengen = computeSchengenUsage(sc);
@@ -3425,12 +3425,12 @@ import { createClient } from '@supabase/supabase-js';
         '<h1>🧭 我的大航海時代 · 環遊世界行程摘要</h1>' +
         '<p class="share-meta">' + escapeHtml(dateRangeText) + (sc.totalDays ? '　·　共 ' + sc.totalDays + ' 天' : '') + '　·　' + data.stops.length + ' 站　·　產生於 ' + fmtDate(new Date()) + '</p>' +
       '</div>' +
-      '<table class="share-table">' +
+      '<div class="share-table-scroll"><table class="share-table">' +
         '<thead><tr><th>#</th><th>國家</th><th>日期</th><th>簽證</th><th>交通方式</th><th>城市</th><th class="num">預估花費</th></tr></thead>' +
         '<tbody>' + rows + '</tbody>' +
-      '</table>' +
+      '</table></div>' +
       '<h2>預算總覽</h2>' +
-      '<table class="share-table share-budget-table">' +
+      '<div class="share-table-scroll"><table class="share-table share-budget-table">' +
         '<tbody>' +
           '<tr><td>簽證費用</td><td class="num">' + data.home + ' ' + fmtMoney(data.visaTotal) + (data.hasUnknownFee ? '　(部分待查證，未計入)' : '') + '</td></tr>' +
           '<tr><td>住宿費用</td><td class="num">' + data.home + ' ' + fmtMoney(data.accomTotal) + '</td></tr>' +
@@ -3439,7 +3439,7 @@ import { createClient } from '@supabase/supabase-js';
           '<tr class="share-grand-total"><td>總計</td><td class="num">' + data.home + ' ' + fmtMoney(data.grandTotal) + '</td></tr>' +
           gapLine +
         '</tbody>' +
-      '</table>' +
+      '</table></div>' +
       emergencySection +
       '<div class="share-footer">' +
         schengenWarning +

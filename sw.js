@@ -1,7 +1,7 @@
 // Bump this on every deploy alongside index.html's ?v= cache-busting timestamp — it's what
 // actually forces stale app-shell files to drop, the query string mainly matters for the very
 // first (pre-service-worker) load.
-const CACHE_VERSION = 'v20260825011625';
+const CACHE_VERSION = 'v20260825023608';
 const APP_SHELL_CACHE = 'app-shell-' + CACHE_VERSION;
 const FLAG_CACHE = 'flags-v1';
 
