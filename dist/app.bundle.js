@@ -26435,6 +26435,69 @@ ${suffix}`;
       }
       return { peakDays, peakDate: peakEndTime !== null ? new Date(peakEndTime) : null, overLimit: peakDays > 90 };
     }
+    function buildTimelineSegmentTrack(segStops) {
+      const segMinDate = segStops.reduce(function(m, s) {
+        return s.arriveDate < m ? s.arriveDate : m;
+      }, segStops[0].arriveDate);
+      const segMaxDate = segStops.reduce(function(m, s) {
+        return s.departDate > m ? s.departDate : m;
+      }, segStops[0].departDate);
+      const segDays = Math.round((segMaxDate - segMinDate) / DAY_MS) + 1;
+      const pxPerDay = 20;
+      const trackWidth = Math.max(600, segDays * pxPerDay);
+      let gridHtml = "";
+      const cursor = new Date(segMinDate.getFullYear(), segMinDate.getMonth(), 1);
+      while (cursor <= segMaxDate) {
+        const offset = Math.round((cursor - segMinDate) / DAY_MS) * pxPerDay;
+        if (offset >= 0) {
+          gridHtml += '<div class="timeline-month-line" style="left:' + offset + 'px"></div>';
+          gridHtml += '<div class="timeline-month-label" style="left:' + offset + 'px">' + (cursor.getMonth() + 1) + "\u6708</div>";
+        }
+        cursor.setMonth(cursor.getMonth() + 1);
+      }
+      let rowsHtml = "";
+      let overlapCount = 0;
+      let totalKm = 0, totalHours = 0, legCount = 0;
+      segStops.forEach(function(s, idx) {
+        const left = Math.round((s.arriveDate - segMinDate) / DAY_MS) * pxPerDay;
+        const width = Math.max(pxPerDay * 0.8, s.duration * pxPerDay);
+        const routeIdx = findStopIndex(s.id);
+        const isOverstay = !!(s.country.stayDays && s.duration > s.country.stayDays);
+        let isOverlap = false;
+        if (idx > 0 && s.arriveDate < segStops[idx - 1].departDate) isOverlap = true;
+        if (isOverlap) overlapCount++;
+        if (idx > 0) {
+          const prev = segStops[idx - 1];
+          const leg = computeLeg(prev.id, prev.country, s.id, s.country);
+          if (leg) {
+            totalKm += leg.km;
+            totalHours += leg.hours;
+            legCount++;
+            const prevLeft = Math.round((prev.arriveDate - segMinDate) / DAY_MS) * pxPerDay;
+            const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
+            const midX = (prevLeft + prevWidth + left) / 2;
+            const legBasis = leg.usedCity ? "\uFF08\u4F9D\u57CE\u5E02\u5EA7\u6A19\uFF1A" + (leg.fromCity || prev.country.name) + " \u2192 " + (leg.toCity || s.country.name) + "\uFF09" : "\uFF08\u7C97\u7565\u4F30\u7B97\uFF0C\u672A\u8A08\u5165\u8F49\u6A5F/\u7B49\u5019\u6642\u9593\uFF09";
+            rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' + escapeHtml(prev.country.name + " \u2192 " + s.country.name + "\uFF1A\u7D04 " + fmtKm(leg.km) + "\uFF0C\u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + " " + fmtKm(leg.km) + " \xB7 " + fmtHours(leg.hours) + "</span></div>";
+          }
+        }
+        const cls = ["timeline-bar", VISA_CLASS[s.country.visaType]];
+        if (isOverstay) cls.push("overstay");
+        if (isOverlap) cls.push("overlap");
+        const tip = s.country.name + " " + s.sched.arrive + " \u2192 " + s.sched.depart + "\uFF08" + s.duration + "\u5929\uFF09" + (isOverstay ? " \u26A0\u8D85\u904E\u5929\u6578\u4E0A\u9650" : "") + (isOverlap ? " \u26A0\u8207\u524D\u4E00\u7AD9\u65E5\u671F\u91CD\u758A" : "");
+        rowsHtml += '<div class="timeline-row"><div class="' + cls.join(" ") + '" data-id="' + escapeHtml(s.id) + '" style="left:' + left + "px;width:" + width + "px;color:" + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '"><span class="order">' + (routeIdx + 1) + "</span><span>" + escapeHtml(s.country.name) + "</span><span>" + s.duration + "\u5929</span></div></div>";
+      });
+      return {
+        html: gridHtml + '<div class="timeline-rows">' + rowsHtml + "</div>",
+        width: trackWidth,
+        minDate: segMinDate,
+        maxDate: segMaxDate,
+        days: segDays,
+        overlapCount,
+        totalKm,
+        totalHours,
+        legCount
+      };
+    }
     function renderTimeline() {
       const track = document.getElementById("timelineTrack");
       const summaryEl = document.getElementById("timelineSummary");
@@ -26453,61 +26516,27 @@ ${suffix}`;
         summaryEl.textContent = "";
         return;
       }
-      const minDate = sc.minDate, maxDate = sc.maxDate, totalDays = sc.totalDays;
-      const pxPerDay = 20;
-      const trackWidth = Math.max(600, totalDays * pxPerDay);
-      let gridHtml = "";
-      const cursor = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-      while (cursor <= maxDate) {
-        const offset = Math.round((cursor - minDate) / DAY_MS) * pxPerDay;
-        if (offset >= 0) {
-          gridHtml += '<div class="timeline-month-line" style="left:' + offset + 'px"></div>';
-          gridHtml += '<div class="timeline-month-label" style="left:' + offset + 'px">' + (cursor.getMonth() + 1) + "\u6708</div>";
-        }
-        cursor.setMonth(cursor.getMonth() + 1);
+      let overlapCount = 0, totalKm = 0, totalHours = 0, legCount = 0;
+      if (sc.segments.length <= 1) {
+        const seg = buildTimelineSegmentTrack(sc.segments[0]);
+        track.style.width = seg.width + "px";
+        track.innerHTML = seg.html;
+        overlapCount = seg.overlapCount;
+        totalKm = seg.totalKm;
+        totalHours = seg.totalHours;
+        legCount = seg.legCount;
+      } else {
+        track.style.width = "";
+        track.innerHTML = sc.segments.map(function(segStops, segIdx) {
+          const seg = buildTimelineSegmentTrack(segStops);
+          overlapCount += seg.overlapCount;
+          totalKm += seg.totalKm;
+          totalHours += seg.totalHours;
+          legCount += seg.legCount;
+          return '<div class="timeline-segment-block"><div class="timeline-segment-label">\u7B2C ' + (segIdx + 1) + " \u6BB5 \xB7 " + fmtDate(seg.minDate) + " \u2192 " + fmtDate(seg.maxDate) + "\uFF08" + seg.days + ' \u5929\uFF09</div><div class="timeline-segment-scroll"><div class="timeline-track" style="width:' + seg.width + 'px">' + seg.html + "</div></div></div>";
+        }).join("");
       }
-      let rowsHtml = "";
-      let overlapCount = 0;
-      let totalKm = 0, totalHours = 0, legCount = 0;
-      const legOf = function(idx) {
-        const prev = scheduled[idx - 1], cur = scheduled[idx];
-        return computeLeg(prev.id, prev.country, cur.id, cur.country);
-      };
-      scheduled.forEach(function(s, idx) {
-        const left = Math.round((s.arriveDate - minDate) / DAY_MS) * pxPerDay;
-        const width = Math.max(pxPerDay * 0.8, s.duration * pxPerDay);
-        const routeIdx = findStopIndex(s.id);
-        const isOverstay = !!(s.country.stayDays && s.duration > s.country.stayDays);
-        let isOverlap = false;
-        if (idx > 0 && s.arriveDate < scheduled[idx - 1].departDate) isOverlap = true;
-        if (isOverlap) overlapCount++;
-        if (idx > 0) {
-          const prev = scheduled[idx - 1];
-          const prevLeft = Math.round((prev.arriveDate - minDate) / DAY_MS) * pxPerDay;
-          const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
-          const midX = (prevLeft + prevWidth + left) / 2;
-          if (prev.segmentIndex !== s.segmentIndex) {
-            rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit trip-gap" style="left:' + midX + 'px" title="' + escapeHtml("\u9593\u9694\u8D85\u904E " + TRIP_GAP_DAYS + " \u5929\uFF0C\u8996\u70BA\u65B0\u7684\u4E00\u6BB5\u884C\u7A0B") + '">\u2014 \u65B0\u7684\u4E00\u6BB5\u884C\u7A0B \u2014</span></div>';
-          } else {
-            const leg = legOf(idx);
-            if (leg) {
-              totalKm += leg.km;
-              totalHours += leg.hours;
-              legCount++;
-              const legBasis = leg.usedCity ? "\uFF08\u4F9D\u57CE\u5E02\u5EA7\u6A19\uFF1A" + (leg.fromCity || prev.country.name) + " \u2192 " + (leg.toCity || s.country.name) + "\uFF09" : "\uFF08\u7C97\u7565\u4F30\u7B97\uFF0C\u672A\u8A08\u5165\u8F49\u6A5F/\u7B49\u5019\u6642\u9593\uFF09";
-              rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' + escapeHtml(prev.country.name + " \u2192 " + s.country.name + "\uFF1A\u7D04 " + fmtKm(leg.km) + "\uFF0C\u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + " " + fmtKm(leg.km) + " \xB7 " + fmtHours(leg.hours) + "</span></div>";
-            }
-          }
-        }
-        const cls = ["timeline-bar", VISA_CLASS[s.country.visaType]];
-        if (isOverstay) cls.push("overstay");
-        if (isOverlap) cls.push("overlap");
-        const tip = s.country.name + " " + s.sched.arrive + " \u2192 " + s.sched.depart + "\uFF08" + s.duration + "\u5929\uFF09" + (isOverstay ? " \u26A0\u8D85\u904E\u5929\u6578\u4E0A\u9650" : "") + (isOverlap ? " \u26A0\u8207\u524D\u4E00\u7AD9\u65E5\u671F\u91CD\u758A" : "");
-        rowsHtml += '<div class="timeline-row"><div class="' + cls.join(" ") + '" data-id="' + escapeHtml(s.id) + '" style="left:' + left + "px;width:" + width + "px;color:" + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '"><span class="order">' + (routeIdx + 1) + "</span><span>" + escapeHtml(s.country.name) + "</span><span>" + s.duration + "\u5929</span></div></div>";
-      });
-      track.style.width = trackWidth + "px";
-      track.innerHTML = gridHtml + '<div class="timeline-rows">' + rowsHtml + "</div>";
-      summaryEl.textContent = fmtDate(minDate) + " \u2192 " + fmtDate(maxDate) + "\uFF0C\u5171 " + totalDays + " \u5929\uFF0C" + scheduled.length + " \u7AD9\u5DF2\u6392\u5B9A" + (sc.segments.length > 1 ? "\uFF0C\u5206\u6210 " + sc.segments.length + " \u6BB5\u884C\u7A0B" : "") + (unscheduled.length ? "\uFF0C" + unscheduled.length + " \u7AD9\u672A\u6392\u5B9A" : "") + (overlapCount ? "\uFF0C\u26A0 " + overlapCount + " \u8655\u65E5\u671F\u91CD\u758A" : "") + (legCount ? "\uFF0C\u7E3D\u79FB\u52D5\u8DDD\u96E2\u7D04 " + fmtKm(totalKm) + "\uFF08\u7D04 " + fmtHours(totalHours) + "\uFF09" : "");
+      summaryEl.textContent = fmtDate(sc.minDate) + " \u2192 " + fmtDate(sc.maxDate) + "\uFF0C\u5171 " + sc.totalDays + " \u5929\uFF0C" + scheduled.length + " \u7AD9\u5DF2\u6392\u5B9A" + (sc.segments.length > 1 ? "\uFF0C\u5206\u6210 " + sc.segments.length + " \u6BB5\u884C\u7A0B" : "") + (unscheduled.length ? "\uFF0C" + unscheduled.length + " \u7AD9\u672A\u6392\u5B9A" : "") + (overlapCount ? "\uFF0C\u26A0 " + overlapCount + " \u8655\u65E5\u671F\u91CD\u758A" : "") + (legCount ? "\uFF0C\u7E3D\u79FB\u52D5\u8DDD\u96E2\u7D04 " + fmtKm(totalKm) + "\uFF08\u7D04 " + fmtHours(totalHours) + "\uFF09" : "");
     }
     function routeTripTotals() {
       let km = 0, hours = 0;

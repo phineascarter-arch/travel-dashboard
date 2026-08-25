@@ -729,6 +729,10 @@ a { color: var(--gold-bright); }
   white-space: nowrap;
 }
 .timeline-rows { position: relative; margin-top: 32px; }
+.timeline-segment-block { margin-bottom: 22px; }
+.timeline-segment-block:last-child { margin-bottom: 0; }
+.timeline-segment-label { font-family: var(--mono); font-size: 0.8rem; color: var(--gold); margin: 0 0 4px 4px; letter-spacing: 0.5px; }
+.timeline-segment-scroll { overflow-x: auto; }
 .timeline-row { position: relative; height: 38px; }
 .timeline-row:nth-child(odd) { background: rgba(255, 255, 255, 0.02); }
 .timeline-transit-row { position: relative; height: 17px; }
@@ -1165,9 +1169,10 @@ a { color: var(--gold-bright); }
 .country-grid::-webkit-scrollbar, .route-list::-webkit-scrollbar, .modal::-webkit-scrollbar, .side-nav::-webkit-scrollbar {
   width: 8px; height: 8px;
 }
-.timeline-scroll::-webkit-scrollbar, .budget-scroll::-webkit-scrollbar { height: 8px; }
+.timeline-scroll::-webkit-scrollbar, .budget-scroll::-webkit-scrollbar, .timeline-segment-scroll::-webkit-scrollbar { height: 8px; }
 .country-grid::-webkit-scrollbar-thumb, .route-list::-webkit-scrollbar-thumb, .modal::-webkit-scrollbar-thumb,
-.side-nav::-webkit-scrollbar-thumb, .timeline-scroll::-webkit-scrollbar-thumb, .budget-scroll::-webkit-scrollbar-thumb {
+.side-nav::-webkit-scrollbar-thumb, .timeline-scroll::-webkit-scrollbar-thumb, .budget-scroll::-webkit-scrollbar-thumb,
+.timeline-segment-scroll::-webkit-scrollbar-thumb {
   background: var(--border-bright); border-radius: 4px;
 }
 

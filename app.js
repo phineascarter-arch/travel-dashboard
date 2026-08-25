@@ -1494,6 +1494,75 @@ import { createClient } from '@supabase/supabase-js';
     return { peakDays: peakDays, peakDate: peakEndTime !== null ? new Date(peakEndTime) : null, overLimit: peakDays > 90 };
   }
 
+  // Builds the month-grid + row markup for ONE trip segment's own stops, positioned on its own
+  // ruler starting at that segment's own minDate — not the whole route's. A segment 20 months
+  // away from the previous one would otherwise sit at a real x-position 20 months to the right,
+  // off the edge of any reasonably-sized track, instead of being a second block someone can
+  // actually see. Also returns the per-segment overlap/distance totals so the caller can sum
+  // them across every segment for the overall summary line.
+  function buildTimelineSegmentTrack(segStops) {
+    const segMinDate = segStops.reduce(function (m, s) { return s.arriveDate < m ? s.arriveDate : m; }, segStops[0].arriveDate);
+    const segMaxDate = segStops.reduce(function (m, s) { return s.departDate > m ? s.departDate : m; }, segStops[0].departDate);
+    const segDays = Math.round((segMaxDate - segMinDate) / DAY_MS) + 1;
+    const pxPerDay = 20;
+    const trackWidth = Math.max(600, segDays * pxPerDay);
+
+    let gridHtml = '';
+    const cursor = new Date(segMinDate.getFullYear(), segMinDate.getMonth(), 1);
+    while (cursor <= segMaxDate) {
+      const offset = Math.round((cursor - segMinDate) / DAY_MS) * pxPerDay;
+      if (offset >= 0) {
+        gridHtml += '<div class="timeline-month-line" style="left:' + offset + 'px"></div>';
+        gridHtml += '<div class="timeline-month-label" style="left:' + offset + 'px">' + (cursor.getMonth() + 1) + '月</div>';
+      }
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+
+    let rowsHtml = '';
+    let overlapCount = 0;
+    let totalKm = 0, totalHours = 0, legCount = 0;
+    segStops.forEach(function (s, idx) {
+      const left = Math.round((s.arriveDate - segMinDate) / DAY_MS) * pxPerDay;
+      const width = Math.max(pxPerDay * 0.8, s.duration * pxPerDay);
+      const routeIdx = findStopIndex(s.id);
+      const isOverstay = !!(s.country.stayDays && s.duration > s.country.stayDays);
+      let isOverlap = false;
+      if (idx > 0 && s.arriveDate < segStops[idx - 1].departDate) isOverlap = true;
+      if (isOverlap) overlapCount++;
+
+      if (idx > 0) {
+        const prev = segStops[idx - 1];
+        const leg = computeLeg(prev.id, prev.country, s.id, s.country);
+        if (leg) {
+          totalKm += leg.km; totalHours += leg.hours; legCount++;
+          const prevLeft = Math.round((prev.arriveDate - segMinDate) / DAY_MS) * pxPerDay;
+          const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
+          const midX = (prevLeft + prevWidth + left) / 2;
+          const legBasis = leg.usedCity ? '（依城市座標：' + (leg.fromCity || prev.country.name) + ' → ' + (leg.toCity || s.country.name) + '）' : '（粗略估算，未計入轉機/等候時間）';
+          rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' +
+            escapeHtml(prev.country.name + ' → ' + s.country.name + '：約 ' + fmtKm(leg.km) + '，預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + ' ' +
+            fmtKm(leg.km) + ' · ' + fmtHours(leg.hours) + '</span></div>';
+        }
+      }
+
+      const cls = ['timeline-bar', VISA_CLASS[s.country.visaType]];
+      if (isOverstay) cls.push('overstay');
+      if (isOverlap) cls.push('overlap');
+      const tip = s.country.name + ' ' + s.sched.arrive + ' → ' + s.sched.depart + '（' + s.duration + '天）' +
+        (isOverstay ? ' ⚠超過天數上限' : '') + (isOverlap ? ' ⚠與前一站日期重疊' : '');
+
+      rowsHtml += '<div class="timeline-row"><div class="' + cls.join(' ') + '" data-id="' + escapeHtml(s.id) + '" style="left:' + left + 'px;width:' + width + 'px;color:' + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '">' +
+        '<span class="order">' + (routeIdx + 1) + '</span><span>' + escapeHtml(s.country.name) + '</span><span>' + s.duration + '天</span>' +
+        '</div></div>';
+    });
+
+    return {
+      html: gridHtml + '<div class="timeline-rows">' + rowsHtml + '</div>',
+      width: trackWidth, minDate: segMinDate, maxDate: segMaxDate, days: segDays,
+      overlapCount: overlapCount, totalKm: totalKm, totalHours: totalHours, legCount: legCount,
+    };
+  }
+
   function renderTimeline() {
     const track = document.getElementById('timelineTrack');
     const summaryEl = document.getElementById('timelineSummary');
@@ -1517,72 +1586,29 @@ import { createClient } from '@supabase/supabase-js';
       return;
     }
 
-    const minDate = sc.minDate, maxDate = sc.maxDate, totalDays = sc.totalDays;
-    const pxPerDay = 20;
-    const trackWidth = Math.max(600, totalDays * pxPerDay);
-
-    let gridHtml = '';
-    const cursor = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-    while (cursor <= maxDate) {
-      const offset = Math.round((cursor - minDate) / DAY_MS) * pxPerDay;
-      if (offset >= 0) {
-        gridHtml += '<div class="timeline-month-line" style="left:' + offset + 'px"></div>';
-        gridHtml += '<div class="timeline-month-label" style="left:' + offset + 'px">' + (cursor.getMonth() + 1) + '月</div>';
-      }
-      cursor.setMonth(cursor.getMonth() + 1);
+    let overlapCount = 0, totalKm = 0, totalHours = 0, legCount = 0;
+    if (sc.segments.length <= 1) {
+      // Common case, unchanged from before segments existed: one ruler, no per-segment label.
+      const seg = buildTimelineSegmentTrack(sc.segments[0]);
+      track.style.width = seg.width + 'px';
+      track.innerHTML = seg.html;
+      overlapCount = seg.overlapCount; totalKm = seg.totalKm; totalHours = seg.totalHours; legCount = seg.legCount;
+    } else {
+      // Each segment gets its own ruler (own month-grid starting at its own minDate) and its own
+      // horizontal scroll area, stacked top to bottom — a real gap between two trips is a blank
+      // area nobody should have to scroll through to find the second trip.
+      track.style.width = '';
+      track.innerHTML = sc.segments.map(function (segStops, segIdx) {
+        const seg = buildTimelineSegmentTrack(segStops);
+        overlapCount += seg.overlapCount; totalKm += seg.totalKm; totalHours += seg.totalHours; legCount += seg.legCount;
+        return '<div class="timeline-segment-block">' +
+          '<div class="timeline-segment-label">第 ' + (segIdx + 1) + ' 段 · ' + fmtDate(seg.minDate) + ' → ' + fmtDate(seg.maxDate) + '（' + seg.days + ' 天）</div>' +
+          '<div class="timeline-segment-scroll"><div class="timeline-track" style="width:' + seg.width + 'px">' + seg.html + '</div></div>' +
+        '</div>';
+      }).join('');
     }
 
-    let rowsHtml = '';
-    let overlapCount = 0;
-    let totalKm = 0, totalHours = 0, legCount = 0;
-    const legOf = function (idx) {
-      const prev = scheduled[idx - 1], cur = scheduled[idx];
-      return computeLeg(prev.id, prev.country, cur.id, cur.country);
-    };
-    scheduled.forEach(function (s, idx) {
-      const left = Math.round((s.arriveDate - minDate) / DAY_MS) * pxPerDay;
-      const width = Math.max(pxPerDay * 0.8, s.duration * pxPerDay);
-      const routeIdx = findStopIndex(s.id);
-      const isOverstay = !!(s.country.stayDays && s.duration > s.country.stayDays);
-      let isOverlap = false;
-      if (idx > 0 && s.arriveDate < scheduled[idx - 1].departDate) isOverlap = true;
-      if (isOverlap) overlapCount++;
-
-      if (idx > 0) {
-        const prev = scheduled[idx - 1];
-        const prevLeft = Math.round((prev.arriveDate - minDate) / DAY_MS) * pxPerDay;
-        const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
-        const midX = (prevLeft + prevWidth + left) / 2;
-        if (prev.segmentIndex !== s.segmentIndex) {
-          rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit trip-gap" style="left:' + midX + 'px" title="' +
-            escapeHtml('間隔超過 ' + TRIP_GAP_DAYS + ' 天，視為新的一段行程') + '">— 新的一段行程 —</span></div>';
-        } else {
-          const leg = legOf(idx);
-          if (leg) {
-            totalKm += leg.km; totalHours += leg.hours; legCount++;
-            const legBasis = leg.usedCity ? '（依城市座標：' + (leg.fromCity || prev.country.name) + ' → ' + (leg.toCity || s.country.name) + '）' : '（粗略估算，未計入轉機/等候時間）';
-            rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' +
-              escapeHtml(prev.country.name + ' → ' + s.country.name + '：約 ' + fmtKm(leg.km) + '，預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + ' ' +
-              fmtKm(leg.km) + ' · ' + fmtHours(leg.hours) + '</span></div>';
-          }
-        }
-      }
-
-      const cls = ['timeline-bar', VISA_CLASS[s.country.visaType]];
-      if (isOverstay) cls.push('overstay');
-      if (isOverlap) cls.push('overlap');
-      const tip = s.country.name + ' ' + s.sched.arrive + ' → ' + s.sched.depart + '（' + s.duration + '天）' +
-        (isOverstay ? ' ⚠超過天數上限' : '') + (isOverlap ? ' ⚠與前一站日期重疊' : '');
-
-      rowsHtml += '<div class="timeline-row"><div class="' + cls.join(' ') + '" data-id="' + escapeHtml(s.id) + '" style="left:' + left + 'px;width:' + width + 'px;color:' + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '">' +
-        '<span class="order">' + (routeIdx + 1) + '</span><span>' + escapeHtml(s.country.name) + '</span><span>' + s.duration + '天</span>' +
-        '</div></div>';
-    });
-
-    track.style.width = trackWidth + 'px';
-    track.innerHTML = gridHtml + '<div class="timeline-rows">' + rowsHtml + '</div>';
-
-    summaryEl.textContent = fmtDate(minDate) + ' → ' + fmtDate(maxDate) + '，共 ' + totalDays + ' 天，' + scheduled.length + ' 站已排定' +
+    summaryEl.textContent = fmtDate(sc.minDate) + ' → ' + fmtDate(sc.maxDate) + '，共 ' + sc.totalDays + ' 天，' + scheduled.length + ' 站已排定' +
       (sc.segments.length > 1 ? '，分成 ' + sc.segments.length + ' 段行程' : '') +
       (unscheduled.length ? '，' + unscheduled.length + ' 站未排定' : '') +
       (overlapCount ? '，⚠ ' + overlapCount + ' 處日期重疊' : '') +
