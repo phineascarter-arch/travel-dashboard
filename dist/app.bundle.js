@@ -26616,11 +26616,16 @@ ${suffix}`;
         const visitLabel = visitCount > 1 ? '<span class="visit-label">\uFF08\u7B2C' + visitCount + "\u6B21\uFF09</span>" : "";
         const dateText = sched.arrive && sched.depart ? sched.arrive + " \u2192 " + sched.depart : "\u5C1A\u672A\u6392\u5B9A\u65E5\u671F";
         let legStat = "";
+        let segmentBreak = "";
         if (idx > 0) {
           const prevStop = state.route[idx - 1];
           const prevC = findCountry(prevStop.countryId);
-          const leg = isTripGap(getSchedule(prevStop.id), getSchedule(stop.id)) ? null : computeLeg(prevStop.id, prevC, stop.id, c);
-          if (leg) legStat = '<div class="activity-stat"><span class="label">\u8DDD\u4E0A\u4E00\u7AD9</span><span class="value">' + fmtKm(leg.km) + '</span></div><div class="activity-stat"><span class="label">' + TRANSPORT_ICONS[leg.mode] + " \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + '</span><span class="value">' + fmtHours(leg.hours) + "</span></div>";
+          if (isTripGap(getSchedule(prevStop.id), getSchedule(stop.id))) {
+            segmentBreak = '<div class="activity-segment-break">\u2014 \u65B0\u7684\u4E00\u6BB5\u884C\u7A0B \u2014</div>';
+          } else {
+            const leg = computeLeg(prevStop.id, prevC, stop.id, c);
+            if (leg) legStat = '<div class="activity-stat"><span class="label">\u8DDD\u4E0A\u4E00\u7AD9</span><span class="value">' + fmtKm(leg.km) + '</span></div><div class="activity-stat"><span class="label">' + TRANSPORT_ICONS[leg.mode] + " \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + '</span><span class="value">' + fmtHours(leg.hours) + "</span></div>";
+          }
         }
         const feeStr = formatFee(c);
         const feeStat = '<div class="activity-stat"><span class="label">\u7C3D\u8B49\u8CBB\u7528</span><span class="value' + (feeStr ? "" : " dim") + '">' + escapeHtml(feeStr || (c.visaType === "visa_free" ? "\u514D\u7C3D\u8B49" : "\u5F85\u67E5\u8B49")) + "</span></div>";
@@ -26630,7 +26635,7 @@ ${suffix}`;
           return "<b>" + escapeHtml(city.name) + "</b>" + (city.nights ? "(" + city.nights + "\u665A)" : "");
         }).join("\u3001") + "</div>" : "";
         const warning2 = duration !== null && c.stayDays && duration > c.stayDays ? '<div class="activity-warning">\u26A0 \u8D85\u904E\u514D\u7C3D/\u8A31\u53EF\u5929\u6578\u4E0A\u9650\uFF08\u9650' + c.stayDays + "\u5929\uFF09</div>" : "";
-        return '<div class="activity-card"><div class="activity-order" style="color:' + (c.safetyLevel === "red" ? "var(--c-restricted)" : c.safetyLevel === "orange" ? "var(--c-voa)" : "#8ee060") + '">' + (idx + 1) + '</div><div class="activity-body"><div class="activity-top"><div class="activity-name">' + escapeHtml(c.name) + visitLabel + '</div><div class="activity-dates">' + escapeHtml(dateText) + '</div></div><div class="activity-stats">' + nightsStat + legStat + feeStat + "</div>" + citiesHtml + warning2 + "</div></div>";
+        return segmentBreak + '<div class="activity-card"><div class="activity-order" style="color:' + (c.safetyLevel === "red" ? "var(--c-restricted)" : c.safetyLevel === "orange" ? "var(--c-voa)" : "#8ee060") + '">' + (idx + 1) + '</div><div class="activity-body"><div class="activity-top"><div class="activity-name">' + escapeHtml(c.name) + visitLabel + '</div><div class="activity-dates">' + escapeHtml(dateText) + '</div></div><div class="activity-stats">' + nightsStat + legStat + feeStat + "</div>" + citiesHtml + warning2 + "</div></div>";
       }).join("");
     }
     function getCountryAutoItems(country, stopId) {

@@ -788,6 +788,7 @@ a { color: var(--gold-bright); }
   margin: 0; font-family: var(--mono); font-size: 1.02rem; color: var(--gold-bright); letter-spacing: 0.5px;
 }
 .activity-log { display: flex; flex-direction: column; gap: 10px; }
+.activity-segment-break { text-align: center; font-size: 0.8rem; color: var(--text-dim); font-family: var(--mono); font-style: italic; padding: 2px 0; }
 
 .activity-card {
   display: flex;
@@ -1161,6 +1162,7 @@ a { color: var(--gold-bright); }
 .timeline-panel .activity-cities { color: #8a8c92; font-family: var(--tlfont); }
 .timeline-panel .activity-cities b { color: #e5e5e5; font-weight: 600; }
 .timeline-panel .activity-warning { font-family: var(--tlfont); }
+.timeline-panel .activity-segment-break { font-family: var(--tlfont); color: #6f7178; }
 .timeline-panel .empty-state { font-family: var(--tlfont); color: #6f7178; }
 
 /* scrollbars — covers every internally-scrolling container (not the page scrollbar), both

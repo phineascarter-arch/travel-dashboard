@@ -1702,12 +1702,17 @@ import { createClient } from '@supabase/supabase-js';
       const dateText = (sched.arrive && sched.depart) ? (sched.arrive + ' → ' + sched.depart) : '尚未排定日期';
 
       let legStat = '';
+      let segmentBreak = '';
       if (idx > 0) {
         const prevStop = state.route[idx - 1];
         const prevC = findCountry(prevStop.countryId);
-        const leg = isTripGap(getSchedule(prevStop.id), getSchedule(stop.id)) ? null : computeLeg(prevStop.id, prevC, stop.id, c);
-        if (leg) legStat = '<div class="activity-stat"><span class="label">距上一站</span><span class="value">' + fmtKm(leg.km) + '</span></div>' +
-          '<div class="activity-stat"><span class="label">' + TRANSPORT_ICONS[leg.mode] + ' 預估' + TRANSPORT_LABELS[leg.mode] + '</span><span class="value">' + fmtHours(leg.hours) + '</span></div>';
+        if (isTripGap(getSchedule(prevStop.id), getSchedule(stop.id))) {
+          segmentBreak = '<div class="activity-segment-break">— 新的一段行程 —</div>';
+        } else {
+          const leg = computeLeg(prevStop.id, prevC, stop.id, c);
+          if (leg) legStat = '<div class="activity-stat"><span class="label">距上一站</span><span class="value">' + fmtKm(leg.km) + '</span></div>' +
+            '<div class="activity-stat"><span class="label">' + TRANSPORT_ICONS[leg.mode] + ' 預估' + TRANSPORT_LABELS[leg.mode] + '</span><span class="value">' + fmtHours(leg.hours) + '</span></div>';
+        }
       }
 
       const feeStr = formatFee(c);
@@ -1724,6 +1729,7 @@ import { createClient } from '@supabase/supabase-js';
         : '';
 
       return (
+        segmentBreak +
         '<div class="activity-card">' +
           '<div class="activity-order" style="color:' + (c.safetyLevel === 'red' ? 'var(--c-restricted)' : c.safetyLevel === 'orange' ? 'var(--c-voa)' : '#8ee060') + '">' + (idx + 1) + '</div>' +
           '<div class="activity-body">' +
