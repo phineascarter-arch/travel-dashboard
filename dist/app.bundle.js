@@ -25663,6 +25663,13 @@ ${suffix}`;
       return (cur + " " + country.fee).trim();
     }
     const DAY_MS = 864e5;
+    const TRIP_GAP_DAYS = 30;
+    function isTripGap(prevSched, curSched) {
+      const prevDepart = parseDay(prevSched && prevSched.depart);
+      const curArrive = parseDay(curSched && curSched.arrive);
+      if (!prevDepart || !curArrive) return false;
+      return curArrive - prevDepart > TRIP_GAP_DAYS * DAY_MS;
+    }
     function getSchedule(id) {
       return state.schedule[id] || {};
     }
@@ -26292,11 +26299,15 @@ ${suffix}`;
           if (idx > 0) {
             const prevStop = state.route[idx - 1];
             const prev = findCountry(prevStop.countryId);
-            const leg = computeLeg(prevStop.id, prev, id, c);
-            if (leg) {
-              const isAuto = !state.legTransport[id];
-              const cityBadge = leg.usedCity ? '<span class="leg-city-badge" title="\u4F9D\u57CE\u5E02\u5EA7\u6A19\u4F30\u7B97\uFF1A' + escapeHtml(leg.fromCity || prev.name) + " \u2192 " + escapeHtml(leg.toCity || c.name) + '">\u{1F3D9}</span>' : "";
-              legLine = '<div class="leg-line">' + TRANSPORT_ICONS[leg.mode] + " \u8DDD\u4E0A\u4E00\u7AD9 " + fmtKm(leg.km) + " \xB7 \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + cityBadge + '<select class="leg-mode-select" data-action="leg-mode" data-id="' + escapeHtml(id) + '"><option value="auto"' + (isAuto ? " selected" : "") + '>\u81EA\u52D5\u5EFA\u8B70</option><option value="flight"' + (!isAuto && leg.mode === "flight" ? " selected" : "") + '>\u2708 \u98DB\u6A5F</option><option value="land"' + (!isAuto && leg.mode === "land" ? " selected" : "") + '>\u{1F68C} \u9678\u8DEF</option><option value="sea"' + (!isAuto && leg.mode === "sea" ? " selected" : "") + ">\u26F4 \u6D77\u8DEF</option></select></div>";
+            if (isTripGap(getSchedule(prevStop.id), sched)) {
+              legLine = '<div class="leg-line trip-gap">\u2500\u2500 \u65B0\u7684\u4E00\u6BB5\u884C\u7A0B \u2500\u2500</div>';
+            } else {
+              const leg = computeLeg(prevStop.id, prev, id, c);
+              if (leg) {
+                const isAuto = !state.legTransport[id];
+                const cityBadge = leg.usedCity ? '<span class="leg-city-badge" title="\u4F9D\u57CE\u5E02\u5EA7\u6A19\u4F30\u7B97\uFF1A' + escapeHtml(leg.fromCity || prev.name) + " \u2192 " + escapeHtml(leg.toCity || c.name) + '">\u{1F3D9}</span>' : "";
+                legLine = '<div class="leg-line">' + TRANSPORT_ICONS[leg.mode] + " \u8DDD\u4E0A\u4E00\u7AD9 " + fmtKm(leg.km) + " \xB7 \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + cityBadge + '<select class="leg-mode-select" data-action="leg-mode" data-id="' + escapeHtml(id) + '"><option value="auto"' + (isAuto ? " selected" : "") + '>\u81EA\u52D5\u5EFA\u8B70</option><option value="flight"' + (!isAuto && leg.mode === "flight" ? " selected" : "") + '>\u2708 \u98DB\u6A5F</option><option value="land"' + (!isAuto && leg.mode === "land" ? " selected" : "") + '>\u{1F68C} \u9678\u8DEF</option><option value="sea"' + (!isAuto && leg.mode === "sea" ? " selected" : "") + ">\u26F4 \u6D77\u8DEF</option></select></div>";
+              }
             }
           }
           const visitLabel = state.route.filter(function(r, i) {
@@ -26357,15 +26368,41 @@ ${suffix}`;
           unscheduled.push(s);
         }
       });
-      if (!scheduled.length) return { scheduled, unscheduled, minDate: null, maxDate: null, totalDays: 0 };
+      if (!scheduled.length) return { scheduled, unscheduled, minDate: null, maxDate: null, totalDays: 0, segments: [] };
+      const byDate = scheduled.slice().sort(function(a, b) {
+        return a.arriveDate - b.arriveDate;
+      });
+      const segments = [[byDate[0]]];
+      for (let i = 1; i < byDate.length; i++) {
+        const current = segments[segments.length - 1];
+        if (isTripGap(current[current.length - 1].sched, byDate[i].sched)) segments.push([byDate[i]]);
+        else current.push(byDate[i]);
+      }
+      const segmentIndexById = {};
+      segments.forEach(function(seg, segIdx) {
+        seg.forEach(function(s) {
+          segmentIndexById[s.id] = segIdx;
+        });
+      });
+      scheduled.forEach(function(s) {
+        s.segmentIndex = segmentIndexById[s.id];
+      });
       const minDate = scheduled.reduce(function(m, s) {
         return s.arriveDate < m ? s.arriveDate : m;
       }, scheduled[0].arriveDate);
       const maxDate = scheduled.reduce(function(m, s) {
         return s.departDate > m ? s.departDate : m;
       }, scheduled[0].departDate);
-      const totalDays = Math.round((maxDate - minDate) / DAY_MS) + 1;
-      return { scheduled, unscheduled, minDate, maxDate, totalDays };
+      const totalDays = segments.reduce(function(sum, seg) {
+        const segMin = seg.reduce(function(m, s) {
+          return s.arriveDate < m ? s.arriveDate : m;
+        }, seg[0].arriveDate);
+        const segMax = seg.reduce(function(m, s) {
+          return s.departDate > m ? s.departDate : m;
+        }, seg[0].departDate);
+        return sum + Math.round((segMax - segMin) / DAY_MS) + 1;
+      }, 0);
+      return { scheduled, unscheduled, minDate, maxDate, totalDays, segments };
     }
     function computeSchengenUsage(sc) {
       const ranges = sc.scheduled.filter(function(s) {
@@ -26445,17 +26482,21 @@ ${suffix}`;
         if (idx > 0 && s.arriveDate < scheduled[idx - 1].departDate) isOverlap = true;
         if (isOverlap) overlapCount++;
         if (idx > 0) {
-          const leg = legOf(idx);
-          if (leg) {
-            totalKm += leg.km;
-            totalHours += leg.hours;
-            legCount++;
-            const prev = scheduled[idx - 1];
-            const prevLeft = Math.round((prev.arriveDate - minDate) / DAY_MS) * pxPerDay;
-            const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
-            const midX = (prevLeft + prevWidth + left) / 2;
-            const legBasis = leg.usedCity ? "\uFF08\u4F9D\u57CE\u5E02\u5EA7\u6A19\uFF1A" + (leg.fromCity || prev.country.name) + " \u2192 " + (leg.toCity || s.country.name) + "\uFF09" : "\uFF08\u7C97\u7565\u4F30\u7B97\uFF0C\u672A\u8A08\u5165\u8F49\u6A5F/\u7B49\u5019\u6642\u9593\uFF09";
-            rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' + escapeHtml(prev.country.name + " \u2192 " + s.country.name + "\uFF1A\u7D04 " + fmtKm(leg.km) + "\uFF0C\u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + " " + fmtKm(leg.km) + " \xB7 " + fmtHours(leg.hours) + "</span></div>";
+          const prev = scheduled[idx - 1];
+          const prevLeft = Math.round((prev.arriveDate - minDate) / DAY_MS) * pxPerDay;
+          const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
+          const midX = (prevLeft + prevWidth + left) / 2;
+          if (prev.segmentIndex !== s.segmentIndex) {
+            rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit trip-gap" style="left:' + midX + 'px" title="' + escapeHtml("\u9593\u9694\u8D85\u904E " + TRIP_GAP_DAYS + " \u5929\uFF0C\u8996\u70BA\u65B0\u7684\u4E00\u6BB5\u884C\u7A0B") + '">\u2014 \u65B0\u7684\u4E00\u6BB5\u884C\u7A0B \u2014</span></div>';
+          } else {
+            const leg = legOf(idx);
+            if (leg) {
+              totalKm += leg.km;
+              totalHours += leg.hours;
+              legCount++;
+              const legBasis = leg.usedCity ? "\uFF08\u4F9D\u57CE\u5E02\u5EA7\u6A19\uFF1A" + (leg.fromCity || prev.country.name) + " \u2192 " + (leg.toCity || s.country.name) + "\uFF09" : "\uFF08\u7C97\u7565\u4F30\u7B97\uFF0C\u672A\u8A08\u5165\u8F49\u6A5F/\u7B49\u5019\u6642\u9593\uFF09";
+              rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' + escapeHtml(prev.country.name + " \u2192 " + s.country.name + "\uFF1A\u7D04 " + fmtKm(leg.km) + "\uFF0C\u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + " " + fmtKm(leg.km) + " \xB7 " + fmtHours(leg.hours) + "</span></div>";
+            }
           }
         }
         const cls = ["timeline-bar", VISA_CLASS[s.country.visaType]];
@@ -26466,7 +26507,7 @@ ${suffix}`;
       });
       track.style.width = trackWidth + "px";
       track.innerHTML = gridHtml + '<div class="timeline-rows">' + rowsHtml + "</div>";
-      summaryEl.textContent = fmtDate(minDate) + " \u2192 " + fmtDate(maxDate) + "\uFF0C\u5171 " + totalDays + " \u5929\uFF0C" + scheduled.length + " \u7AD9\u5DF2\u6392\u5B9A" + (unscheduled.length ? "\uFF0C" + unscheduled.length + " \u7AD9\u672A\u6392\u5B9A" : "") + (overlapCount ? "\uFF0C\u26A0 " + overlapCount + " \u8655\u65E5\u671F\u91CD\u758A" : "") + (legCount ? "\uFF0C\u7E3D\u79FB\u52D5\u8DDD\u96E2\u7D04 " + fmtKm(totalKm) + "\uFF08\u7D04 " + fmtHours(totalHours) + "\uFF09" : "");
+      summaryEl.textContent = fmtDate(minDate) + " \u2192 " + fmtDate(maxDate) + "\uFF0C\u5171 " + totalDays + " \u5929\uFF0C" + scheduled.length + " \u7AD9\u5DF2\u6392\u5B9A" + (sc.segments.length > 1 ? "\uFF0C\u5206\u6210 " + sc.segments.length + " \u6BB5\u884C\u7A0B" : "") + (unscheduled.length ? "\uFF0C" + unscheduled.length + " \u7AD9\u672A\u6392\u5B9A" : "") + (overlapCount ? "\uFF0C\u26A0 " + overlapCount + " \u8655\u65E5\u671F\u91CD\u758A" : "") + (legCount ? "\uFF0C\u7E3D\u79FB\u52D5\u8DDD\u96E2\u7D04 " + fmtKm(totalKm) + "\uFF08\u7D04 " + fmtHours(totalHours) + "\uFF09" : "");
     }
     function routeTripTotals() {
       let km = 0, hours = 0;
@@ -26478,10 +26519,12 @@ ${suffix}`;
         if (idx > 0) {
           const prevStop = state.route[idx - 1];
           const prevC = findCountry(prevStop.countryId);
-          const leg = computeLeg(prevStop.id, prevC, stop.id, c);
-          if (leg) {
-            km += leg.km;
-            hours += leg.hours;
+          if (!isTripGap(getSchedule(prevStop.id), getSchedule(stop.id))) {
+            const leg = computeLeg(prevStop.id, prevC, stop.id, c);
+            if (leg) {
+              km += leg.km;
+              hours += leg.hours;
+            }
           }
         }
         if (c.fee !== null && c.fee !== void 0 && c.fee > 0) {
@@ -26547,7 +26590,7 @@ ${suffix}`;
         if (idx > 0) {
           const prevStop = state.route[idx - 1];
           const prevC = findCountry(prevStop.countryId);
-          const leg = computeLeg(prevStop.id, prevC, stop.id, c);
+          const leg = isTripGap(getSchedule(prevStop.id), getSchedule(stop.id)) ? null : computeLeg(prevStop.id, prevC, stop.id, c);
           if (leg) legStat = '<div class="activity-stat"><span class="label">\u8DDD\u4E0A\u4E00\u7AD9</span><span class="value">' + fmtKm(leg.km) + '</span></div><div class="activity-stat"><span class="label">' + TRANSPORT_ICONS[leg.mode] + " \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + '</span><span class="value">' + fmtHours(leg.hours) + "</span></div>";
         }
         const feeStr = formatFee(c);
@@ -27487,6 +27530,7 @@ ${suffix}`;
       });
       const svgNS = "http://www.w3.org/2000/svg";
       for (let i = 0; i < points.length - 1; i++) {
+        if (isTripGap(getSchedule(points[i].stopId), getSchedule(points[i + 1].stopId))) continue;
         const line = document.createElementNS(svgNS, "line");
         line.setAttribute("x1", points[i].x);
         line.setAttribute("y1", points[i].y);
@@ -28070,7 +28114,7 @@ ${suffix}`;
         if (idx > 0) {
           const prevStop = state.route[idx - 1];
           const prevC = findCountry(prevStop.countryId);
-          leg = computeLeg(prevStop.id, prevC, stop.id, c);
+          if (!isTripGap(getSchedule(prevStop.id), getSchedule(stop.id))) leg = computeLeg(prevStop.id, prevC, stop.id, c);
         }
         const visitCount = state.route.filter(function(r, i) {
           return i <= idx && r.countryId === stop.countryId;

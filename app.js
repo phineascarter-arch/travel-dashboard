@@ -575,6 +575,22 @@ import { createClient } from '@supabase/supabase-js';
 
   const DAY_MS = 86400000;
 
+  // Two stops more than this many days apart (previous stop's depart → this stop's arrive) are
+  // treated as separate trips, not two legs of one continuous journey — e.g. a short Southeast
+  // Asia trip in 2026 and an unrelated Indonesia trip in 2028 shouldn't be summed into one
+  // "610 day, 3,682km" itinerary just because both happen to be rows in the same route list.
+  const TRIP_GAP_DAYS = 30;
+
+  // Whether curSched's stay starts more than TRIP_GAP_DAYS after prevSched's stay ends. Returns
+  // false (i.e. "still connected") when either side is missing a date — an undated stop can't be
+  // shown to be a gap, so it falls back to the old always-connected behavior rather than guessing.
+  function isTripGap(prevSched, curSched) {
+    const prevDepart = parseDay(prevSched && prevSched.depart);
+    const curArrive = parseDay(curSched && curSched.arrive);
+    if (!prevDepart || !curArrive) return false;
+    return (curArrive - prevDepart) > TRIP_GAP_DAYS * DAY_MS;
+  }
+
   function getSchedule(id) {
     return state.schedule[id] || {};
   }
@@ -1318,20 +1334,24 @@ import { createClient } from '@supabase/supabase-js';
         if (idx > 0) {
           const prevStop = state.route[idx - 1];
           const prev = findCountry(prevStop.countryId);
-          const leg = computeLeg(prevStop.id, prev, id, c);
-          if (leg) {
-            const isAuto = !state.legTransport[id];
-            const cityBadge = leg.usedCity
-              ? '<span class="leg-city-badge" title="依城市座標估算：' + escapeHtml(leg.fromCity || prev.name) + ' → ' + escapeHtml(leg.toCity || c.name) + '">🏙</span>'
-              : '';
-            legLine = '<div class="leg-line">' + TRANSPORT_ICONS[leg.mode] + ' 距上一站 ' + fmtKm(leg.km) + ' · 預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + cityBadge +
-              '<select class="leg-mode-select" data-action="leg-mode" data-id="' + escapeHtml(id) + '">' +
-                '<option value="auto"' + (isAuto ? ' selected' : '') + '>自動建議</option>' +
-                '<option value="flight"' + (!isAuto && leg.mode === 'flight' ? ' selected' : '') + '>✈ 飛機</option>' +
-                '<option value="land"' + (!isAuto && leg.mode === 'land' ? ' selected' : '') + '>🚌 陸路</option>' +
-                '<option value="sea"' + (!isAuto && leg.mode === 'sea' ? ' selected' : '') + '>⛴ 海路</option>' +
-              '</select>' +
-            '</div>';
+          if (isTripGap(getSchedule(prevStop.id), sched)) {
+            legLine = '<div class="leg-line trip-gap">── 新的一段行程 ──</div>';
+          } else {
+            const leg = computeLeg(prevStop.id, prev, id, c);
+            if (leg) {
+              const isAuto = !state.legTransport[id];
+              const cityBadge = leg.usedCity
+                ? '<span class="leg-city-badge" title="依城市座標估算：' + escapeHtml(leg.fromCity || prev.name) + ' → ' + escapeHtml(leg.toCity || c.name) + '">🏙</span>'
+                : '';
+              legLine = '<div class="leg-line">' + TRANSPORT_ICONS[leg.mode] + ' 距上一站 ' + fmtKm(leg.km) + ' · 預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + cityBadge +
+                '<select class="leg-mode-select" data-action="leg-mode" data-id="' + escapeHtml(id) + '">' +
+                  '<option value="auto"' + (isAuto ? ' selected' : '') + '>自動建議</option>' +
+                  '<option value="flight"' + (!isAuto && leg.mode === 'flight' ? ' selected' : '') + '>✈ 飛機</option>' +
+                  '<option value="land"' + (!isAuto && leg.mode === 'land' ? ' selected' : '') + '>🚌 陸路</option>' +
+                  '<option value="sea"' + (!isAuto && leg.mode === 'sea' ? ' selected' : '') + '>⛴ 海路</option>' +
+                '</select>' +
+              '</div>';
+            }
           }
         }
         const visitLabel = state.route.filter(function (r, i) { return i <= idx && r.countryId === stop.countryId; }).length > 1
@@ -1415,12 +1435,35 @@ import { createClient } from '@supabase/supabase-js';
       }
     });
 
-    if (!scheduled.length) return { scheduled: scheduled, unscheduled: unscheduled, minDate: null, maxDate: null, totalDays: 0 };
+    if (!scheduled.length) return { scheduled: scheduled, unscheduled: unscheduled, minDate: null, maxDate: null, totalDays: 0, segments: [] };
+
+    // Group into trip segments using a copy sorted by arrival date — segments are about which
+    // stops are close enough in time to be "the same trip", independent of whatever order they
+    // happen to sit in state.route (sortRouteByDate keeps that date-ordered anyway, but this
+    // shouldn't silently break if that ever isn't true). segmentIndex then gets attached back
+    // onto the actual `scheduled` entries so callers that already iterate that array in route
+    // order — renderTimeline in particular — can just compare neighbors' segmentIndex directly.
+    const byDate = scheduled.slice().sort(function (a, b) { return a.arriveDate - b.arriveDate; });
+    const segments = [[byDate[0]]];
+    for (let i = 1; i < byDate.length; i++) {
+      const current = segments[segments.length - 1];
+      if (isTripGap(current[current.length - 1].sched, byDate[i].sched)) segments.push([byDate[i]]);
+      else current.push(byDate[i]);
+    }
+    const segmentIndexById = {};
+    segments.forEach(function (seg, segIdx) { seg.forEach(function (s) { segmentIndexById[s.id] = segIdx; }); });
+    scheduled.forEach(function (s) { s.segmentIndex = segmentIndexById[s.id]; });
 
     const minDate = scheduled.reduce(function (m, s) { return s.arriveDate < m ? s.arriveDate : m; }, scheduled[0].arriveDate);
     const maxDate = scheduled.reduce(function (m, s) { return s.departDate > m ? s.departDate : m; }, scheduled[0].departDate);
-    const totalDays = Math.round((maxDate - minDate) / DAY_MS) + 1;
-    return { scheduled: scheduled, unscheduled: unscheduled, minDate: minDate, maxDate: maxDate, totalDays: totalDays };
+    // Sum of each segment's own span, not the full calendar range — a 20-month gap between two
+    // unrelated trips shouldn't inflate "total days" as if it were 20 months of continuous travel.
+    const totalDays = segments.reduce(function (sum, seg) {
+      const segMin = seg.reduce(function (m, s) { return s.arriveDate < m ? s.arriveDate : m; }, seg[0].arriveDate);
+      const segMax = seg.reduce(function (m, s) { return s.departDate > m ? s.departDate : m; }, seg[0].departDate);
+      return sum + Math.round((segMax - segMin) / DAY_MS) + 1;
+    }, 0);
+    return { scheduled: scheduled, unscheduled: unscheduled, minDate: minDate, maxDate: maxDate, totalDays: totalDays, segments: segments };
   }
 
   // Schengen's 90-day allowance is shared across all member countries within any rolling
@@ -1506,17 +1549,22 @@ import { createClient } from '@supabase/supabase-js';
       if (isOverlap) overlapCount++;
 
       if (idx > 0) {
-        const leg = legOf(idx);
-        if (leg) {
-          totalKm += leg.km; totalHours += leg.hours; legCount++;
-          const prev = scheduled[idx - 1];
-          const prevLeft = Math.round((prev.arriveDate - minDate) / DAY_MS) * pxPerDay;
-          const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
-          const midX = (prevLeft + prevWidth + left) / 2;
-          const legBasis = leg.usedCity ? '（依城市座標：' + (leg.fromCity || prev.country.name) + ' → ' + (leg.toCity || s.country.name) + '）' : '（粗略估算，未計入轉機/等候時間）';
-          rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' +
-            escapeHtml(prev.country.name + ' → ' + s.country.name + '：約 ' + fmtKm(leg.km) + '，預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + ' ' +
-            fmtKm(leg.km) + ' · ' + fmtHours(leg.hours) + '</span></div>';
+        const prev = scheduled[idx - 1];
+        const prevLeft = Math.round((prev.arriveDate - minDate) / DAY_MS) * pxPerDay;
+        const prevWidth = Math.max(pxPerDay * 0.8, prev.duration * pxPerDay);
+        const midX = (prevLeft + prevWidth + left) / 2;
+        if (prev.segmentIndex !== s.segmentIndex) {
+          rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit trip-gap" style="left:' + midX + 'px" title="' +
+            escapeHtml('間隔超過 ' + TRIP_GAP_DAYS + ' 天，視為新的一段行程') + '">— 新的一段行程 —</span></div>';
+        } else {
+          const leg = legOf(idx);
+          if (leg) {
+            totalKm += leg.km; totalHours += leg.hours; legCount++;
+            const legBasis = leg.usedCity ? '（依城市座標：' + (leg.fromCity || prev.country.name) + ' → ' + (leg.toCity || s.country.name) + '）' : '（粗略估算，未計入轉機/等候時間）';
+            rowsHtml += '<div class="timeline-transit-row"><span class="timeline-transit" style="left:' + midX + 'px" title="' +
+              escapeHtml(prev.country.name + ' → ' + s.country.name + '：約 ' + fmtKm(leg.km) + '，預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + legBasis) + '">' + TRANSPORT_ICONS[leg.mode] + ' ' +
+              fmtKm(leg.km) + ' · ' + fmtHours(leg.hours) + '</span></div>';
+          }
         }
       }
 
@@ -1535,6 +1583,7 @@ import { createClient } from '@supabase/supabase-js';
     track.innerHTML = gridHtml + '<div class="timeline-rows">' + rowsHtml + '</div>';
 
     summaryEl.textContent = fmtDate(minDate) + ' → ' + fmtDate(maxDate) + '，共 ' + totalDays + ' 天，' + scheduled.length + ' 站已排定' +
+      (sc.segments.length > 1 ? '，分成 ' + sc.segments.length + ' 段行程' : '') +
       (unscheduled.length ? '，' + unscheduled.length + ' 站未排定' : '') +
       (overlapCount ? '，⚠ ' + overlapCount + ' 處日期重疊' : '') +
       (legCount ? '，總移動距離約 ' + fmtKm(totalKm) + '（約 ' + fmtHours(totalHours) + '）' : '');
@@ -1551,8 +1600,10 @@ import { createClient } from '@supabase/supabase-js';
       if (idx > 0) {
         const prevStop = state.route[idx - 1];
         const prevC = findCountry(prevStop.countryId);
-        const leg = computeLeg(prevStop.id, prevC, stop.id, c);
-        if (leg) { km += leg.km; hours += leg.hours; }
+        if (!isTripGap(getSchedule(prevStop.id), getSchedule(stop.id))) {
+          const leg = computeLeg(prevStop.id, prevC, stop.id, c);
+          if (leg) { km += leg.km; hours += leg.hours; }
+        }
       }
       if (c.fee !== null && c.fee !== undefined && c.fee > 0) {
         const cur = c.feeCurrency || 'USD';
@@ -1628,7 +1679,7 @@ import { createClient } from '@supabase/supabase-js';
       if (idx > 0) {
         const prevStop = state.route[idx - 1];
         const prevC = findCountry(prevStop.countryId);
-        const leg = computeLeg(prevStop.id, prevC, stop.id, c);
+        const leg = isTripGap(getSchedule(prevStop.id), getSchedule(stop.id)) ? null : computeLeg(prevStop.id, prevC, stop.id, c);
         if (leg) legStat = '<div class="activity-stat"><span class="label">距上一站</span><span class="value">' + fmtKm(leg.km) + '</span></div>' +
           '<div class="activity-stat"><span class="label">' + TRANSPORT_ICONS[leg.mode] + ' 預估' + TRANSPORT_LABELS[leg.mode] + '</span><span class="value">' + fmtHours(leg.hours) + '</span></div>';
       }
@@ -2725,6 +2776,11 @@ import { createClient } from '@supabase/supabase-js';
 
     const svgNS = 'http://www.w3.org/2000/svg';
     for (let i = 0; i < points.length - 1; i++) {
+      // Two stops more than TRIP_GAP_DAYS apart are separate trips, not consecutive legs of one
+      // journey — skip the connecting line/label entirely rather than drawing a route segment
+      // that implies "then you flew here", same rule renderRoute/renderTimeline apply.
+      if (isTripGap(getSchedule(points[i].stopId), getSchedule(points[i + 1].stopId))) continue;
+
       const line = document.createElementNS(svgNS, 'line');
       line.setAttribute('x1', points[i].x);
       line.setAttribute('y1', points[i].y);
@@ -3406,7 +3462,7 @@ import { createClient } from '@supabase/supabase-js';
       if (idx > 0) {
         const prevStop = state.route[idx - 1];
         const prevC = findCountry(prevStop.countryId);
-        leg = computeLeg(prevStop.id, prevC, stop.id, c);
+        if (!isTripGap(getSchedule(prevStop.id), getSchedule(stop.id))) leg = computeLeg(prevStop.id, prevC, stop.id, c);
       }
       const visitCount = state.route.filter(function (r, i) { return i <= idx && r.countryId === stop.countryId; }).length;
       return { stop: stop, country: c, sched: sched, duration: duration, cities: cities, budget: sb, leg: leg, visitCount: visitCount, order: idx + 1 };

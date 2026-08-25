@@ -625,6 +625,7 @@ a { color: var(--gold-bright); }
 .route-item .info .fee { font-size: 0.84rem; color: var(--text-dim); font-family: var(--mono); }
 .route-item .info .local-time { font-size: 0.84rem; color: var(--gold); font-family: var(--mono); margin-top: 2px; }
 .route-item .info .leg-line { font-size: 0.82rem; color: var(--c-eta); font-family: var(--mono); margin-top: 2px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.route-item .info .leg-line.trip-gap { color: var(--text-dim); font-style: italic; }
 .leg-mode-select {
   font-family: var(--mono); font-size: 0.8rem; padding: 1px 4px; border-radius: 3px;
   border: 1px solid var(--border); background: var(--bg-input); color: var(--c-eta);
@@ -735,6 +736,7 @@ a { color: var(--gold-bright); }
   position: absolute; top: 0; transform: translateX(-50%);
   font-family: var(--mono); font-size: 0.76rem; color: var(--c-eta); white-space: nowrap;
 }
+.timeline-transit.trip-gap { color: var(--text-dim); font-style: italic; }
 .timeline-bar {
   position: absolute;
   top: 4px;
@@ -1135,6 +1137,7 @@ a { color: var(--gold-bright); }
 .timeline-panel .timeline-month-line { background: rgba(255, 255, 255, 0.07); }
 .timeline-panel .timeline-month-label { color: #6f7178; font-family: var(--tlfont); }
 .timeline-panel .timeline-transit { color: #8ee060; font-family: var(--tlfont); }
+.timeline-panel .timeline-transit.trip-gap { color: #6f7178; font-style: italic; }
 .timeline-panel .timeline-bar { font-family: var(--tlfont); border-radius: 6px; background: rgba(255, 255, 255, 0.045); }
 .timeline-panel .timeline-chip { font-family: var(--tlfont); border-color: #33353b; color: #9a9ca3; }
 .timeline-panel .timeline-chip:hover { color: #8ee060; border-color: #8ee060; }
