@@ -191,6 +191,14 @@ import { createClient } from '@supabase/supabase-js';
     ['checklist', 'budget', 'emergencyCard'].forEach(function (key) {
       merged[key] = Object.assign({}, defaults[key], (saved && saved[key]) || {});
     });
+    // The Object.assign above only shallow-merges emergencyCard's own keys — a malformed
+    // cards/contacts (null, or not an array at all) passes straight through untouched, and
+    // renderEmergencyCard() calls .length/.map on both with no guard, same failure mode as the
+    // savedMaps one below.
+    merged.emergencyCard = Object.assign({}, merged.emergencyCard, {
+      cards: Array.isArray(merged.emergencyCard.cards) ? merged.emergencyCard.cards.filter(function (r) { return r && typeof r === 'object'; }) : [],
+      contacts: Array.isArray(merged.emergencyCard.contacts) ? merged.emergencyCard.contacts.filter(function (r) { return r && typeof r === 'object'; }) : [],
+    });
     // Sanitize right here — the one place a localStorage load, a JSON-file import, and a pulled
     // cloud-sync row all funnel through — instead of hardening every render site individually.
     if (Array.isArray(merged.customCountries)) {
@@ -1185,7 +1193,7 @@ import { createClient } from '@supabase/supabase-js';
       ) : '';
 
       return (
-        '<div class="country-card' + highlighted + '" data-id="' + c.id + '">' +
+        '<div class="country-card' + highlighted + '" data-id="' + escapeHtml(c.id) + '">' +
           '<div class="card-top">' +
             '<div><div class="card-name">' + flagImg(c.id) + escapeHtml(c.name) + '</div>' +
             (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + '</div>' : '') + '</div>' +
@@ -1201,15 +1209,15 @@ import { createClient } from '@supabase/supabase-js';
           personal +
           heritageDetail +
           '<div class="card-bottom">' +
-            '<select class="status-select" data-action="status" data-id="' + c.id + '">' +
+            '<select class="status-select" data-action="status" data-id="' + escapeHtml(c.id) + '">' +
               Object.keys(STATUS_LABELS).map(function (k) {
                 return '<option value="' + k + '"' + (k === status ? ' selected' : '') + '>' + STATUS_LABELS[k] + '</option>';
               }).join('') +
             '</select>' +
             '<div class="card-actions">' +
               (routeCount ? '<span class="route-count-badge">路線中×' + routeCount + '</span>' : '') +
-              '<button class="btn btn-small btn-primary" data-action="add-route" data-id="' + c.id + '">' + (routeCount ? '＋ 再次加入' : '＋ 加入路線') + '</button>' +
-              '<button class="btn btn-small btn-ghost" data-action="edit" data-id="' + c.id + '">編輯</button>' +
+              '<button class="btn btn-small btn-primary" data-action="add-route" data-id="' + escapeHtml(c.id) + '">' + (routeCount ? '＋ 再次加入' : '＋ 加入路線') + '</button>' +
+              '<button class="btn btn-small btn-ghost" data-action="edit" data-id="' + escapeHtml(c.id) + '">編輯</button>' +
             '</div>' +
           '</div>' +
         '</div>'
@@ -1234,7 +1242,7 @@ import { createClient } from '@supabase/supabase-js';
     }
     const chips = cities.map(function (c, idx) {
       if (editingCityKey === stopId + ':' + c.id) {
-        return '<span class="city-chip city-chip-editing" data-stop="' + stopId + '" data-city="' + c.id + '">' +
+        return '<span class="city-chip city-chip-editing" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '">' +
           '<input type="text" class="city-edit-name" value="' + escapeHtml(c.name) + '" placeholder="城市名稱">' +
           '<input type="number" class="city-edit-nights" min="0" value="' + (c.nights || '') + '" placeholder="晚數">' +
           '<button type="button" class="btn btn-small" data-action="city-edit-save">儲存</button>' +
@@ -1247,13 +1255,13 @@ import { createClient } from '@supabase/supabase-js';
         : '';
       return '<span class="city-chip">' +
         '<span class="city-move-btns">' +
-          '<button type="button" class="city-move" data-action="city-move-up" data-stop="' + stopId + '" data-city="' + c.id + '"' + (idx === 0 ? ' disabled' : '') + '>▲</button>' +
-          '<button type="button" class="city-move" data-action="city-move-down" data-stop="' + stopId + '" data-city="' + c.id + '"' + (idx === cities.length - 1 ? ' disabled' : '') + '>▼</button>' +
+          '<button type="button" class="city-move" data-action="city-move-up" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '"' + (idx === 0 ? ' disabled' : '') + '>▲</button>' +
+          '<button type="button" class="city-move" data-action="city-move-down" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '"' + (idx === cities.length - 1 ? ' disabled' : '') + '>▼</button>' +
         '</span>' +
         geoIcon + escapeHtml(c.name) +
         (c.nights ? ' <b>' + c.nights + '晚</b>' : '') +
-        '<button type="button" class="city-edit" data-action="city-edit" data-stop="' + stopId + '" data-city="' + c.id + '" title="編輯">✎</button>' +
-        '<button type="button" class="city-remove" data-action="city-remove" data-stop="' + stopId + '" data-city="' + c.id + '" title="移除">✕</button></span>';
+        '<button type="button" class="city-edit" data-action="city-edit" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '" title="編輯">✎</button>' +
+        '<button type="button" class="city-remove" data-action="city-remove" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '" title="移除">✕</button></span>';
     }).join('');
 
     return (
@@ -1261,9 +1269,9 @@ import { createClient } from '@supabase/supabase-js';
         '<div class="city-header">🏙 城市清單' + (cities.length ? '（' + cities.length + '）' + mismatch : '') + '</div>' +
         (chips ? '<div class="city-chips">' + chips + '</div>' : '') +
         '<div class="city-add-row">' +
-          '<input type="text" class="city-name-input" data-field="cityName" data-stop="' + stopId + '" placeholder="城市名稱">' +
-          '<input type="number" class="city-nights-input" data-field="cityNights" data-stop="' + stopId + '" min="0" placeholder="晚數">' +
-          '<button type="button" class="btn btn-small btn-ghost" data-action="city-add" data-stop="' + stopId + '">+ 新增</button>' +
+          '<input type="text" class="city-name-input" data-field="cityName" data-stop="' + escapeHtml(stopId) + '" placeholder="城市名稱">' +
+          '<input type="number" class="city-nights-input" data-field="cityNights" data-stop="' + escapeHtml(stopId) + '" min="0" placeholder="晚數">' +
+          '<button type="button" class="btn btn-small btn-ghost" data-action="city-add" data-stop="' + escapeHtml(stopId) + '">+ 新增</button>' +
         '</div>' +
       '</div>'
     );
@@ -1317,7 +1325,7 @@ import { createClient } from '@supabase/supabase-js';
               ? '<span class="leg-city-badge" title="依城市座標估算：' + escapeHtml(leg.fromCity || prev.name) + ' → ' + escapeHtml(leg.toCity || c.name) + '">🏙</span>'
               : '';
             legLine = '<div class="leg-line">' + TRANSPORT_ICONS[leg.mode] + ' 距上一站 ' + fmtKm(leg.km) + ' · 預估' + TRANSPORT_LABELS[leg.mode] + ' ' + fmtHours(leg.hours) + cityBadge +
-              '<select class="leg-mode-select" data-action="leg-mode" data-id="' + id + '">' +
+              '<select class="leg-mode-select" data-action="leg-mode" data-id="' + escapeHtml(id) + '">' +
                 '<option value="auto"' + (isAuto ? ' selected' : '') + '>自動建議</option>' +
                 '<option value="flight"' + (!isAuto && leg.mode === 'flight' ? ' selected' : '') + '>✈ 飛機</option>' +
                 '<option value="land"' + (!isAuto && leg.mode === 'land' ? ' selected' : '') + '>🚌 陸路</option>' +
@@ -1332,21 +1340,21 @@ import { createClient } from '@supabase/supabase-js';
         const timeInfo = getLocalTimeInfo(c.tz);
         const timeLine = timeInfo ? '<div class="local-time" data-tz="' + escapeHtml(c.tz) + '">🕐 ' + timeInfo.timeStr + (timeInfo.diffLabel ? '（' + timeInfo.diffLabel + '）' : '') + '</div>' : '';
         return (
-          '<li class="route-item" data-id="' + id + '">' +
+          '<li class="route-item" data-id="' + escapeHtml(id) + '">' +
             '<span class="order" style="color:' + orderColor(idx) + '">' + (idx + 1) + '</span>' +
             '<div class="info"><div class="name">' + flagImg(c.id) + escapeHtml(c.name) + visitLabel + '</div>' +
             '<div class="fee">' + VISA_LABELS[c.visaType] + (fee ? ' · ' + escapeHtml(fee) : '') + (duration !== null ? ' · ' + duration + '天' : '') + '</div>' +
             timeLine +
             legLine + '</div>' +
             '<div class="move-btns">' +
-              '<button data-action="move-up" data-id="' + id + '" ' + (idx === 0 ? 'disabled' : '') + '>▲</button>' +
-              '<button data-action="move-down" data-id="' + id + '" ' + (idx === state.route.length - 1 ? 'disabled' : '') + '>▼</button>' +
+              '<button data-action="move-up" data-id="' + escapeHtml(id) + '" ' + (idx === 0 ? 'disabled' : '') + '>▲</button>' +
+              '<button data-action="move-down" data-id="' + escapeHtml(id) + '" ' + (idx === state.route.length - 1 ? 'disabled' : '') + '>▼</button>' +
             '</div>' +
-            '<button class="btn btn-small btn-ghost" data-action="remove-route" data-id="' + id + '">移除</button>' +
+            '<button class="btn btn-small btn-ghost" data-action="remove-route" data-id="' + escapeHtml(id) + '">移除</button>' +
             '<div class="date-row">' +
-              '<input type="date" data-action="date-arrive" data-id="' + id + '" value="' + (sched.arrive || '') + '">' +
+              '<input type="date" data-action="date-arrive" data-id="' + escapeHtml(id) + '" value="' + (sched.arrive || '') + '">' +
               '<span class="date-sep">→</span>' +
-              '<input type="date" data-action="date-depart" data-id="' + id + '" value="' + (sched.depart || '') + '">' +
+              '<input type="date" data-action="date-depart" data-id="' + escapeHtml(id) + '" value="' + (sched.depart || '') + '">' +
             '</div>' +
             warning +
             renderCitySectionHtml(id, duration, c) +
@@ -1453,7 +1461,7 @@ import { createClient } from '@supabase/supabase-js';
     const scheduled = sc.scheduled, unscheduled = sc.unscheduled;
 
     unscheduledEl.innerHTML = unscheduled.map(function (s) {
-      return '<button type="button" class="timeline-chip" data-id="' + s.id + '">' + escapeHtml(s.country.name) + ' 未排定</button>';
+      return '<button type="button" class="timeline-chip" data-id="' + escapeHtml(s.id) + '">' + escapeHtml(s.country.name) + ' 未排定</button>';
     }).join('');
 
     renderTimelineStats(sc);
@@ -1518,7 +1526,7 @@ import { createClient } from '@supabase/supabase-js';
       const tip = s.country.name + ' ' + s.sched.arrive + ' → ' + s.sched.depart + '（' + s.duration + '天）' +
         (isOverstay ? ' ⚠超過天數上限' : '') + (isOverlap ? ' ⚠與前一站日期重疊' : '');
 
-      rowsHtml += '<div class="timeline-row"><div class="' + cls.join(' ') + '" data-id="' + s.id + '" style="left:' + left + 'px;width:' + width + 'px;color:' + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '">' +
+      rowsHtml += '<div class="timeline-row"><div class="' + cls.join(' ') + '" data-id="' + escapeHtml(s.id) + '" style="left:' + left + 'px;width:' + width + 'px;color:' + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '">' +
         '<span class="order">' + (routeIdx + 1) + '</span><span>' + escapeHtml(s.country.name) + '</span><span>' + s.duration + '天</span>' +
         '</div></div>';
     });
@@ -1680,7 +1688,7 @@ import { createClient } from '@supabase/supabase-js';
     else state.checklist.done[id] = true;
     saveState();
     renderChecklist();
-    const li = document.querySelector('.checklist-item[data-id="' + id + '"]');
+    const li = document.querySelector('.checklist-item[data-id="' + escapeHtml(id) + '"]');
     if (li) animate(li, { scale: [1, 1.04, 1] }, { duration: 0.22, ease: 'ease-out' });
   }
 
@@ -1712,10 +1720,10 @@ import { createClient } from '@supabase/supabase-js';
       const isCustom = it.id.indexOf('gc_') === 0 || it.id.indexOf('cc_') === 0;
       const done = !!state.checklist.done[it.id];
       return (
-        '<li class="checklist-item' + (done ? ' done' : '') + '" data-id="' + it.id + '">' +
-          '<input type="checkbox" data-action="cl-toggle" data-id="' + it.id + '"' + (done ? ' checked' : '') + '>' +
+        '<li class="checklist-item' + (done ? ' done' : '') + '" data-id="' + escapeHtml(it.id) + '">' +
+          '<input type="checkbox" data-action="cl-toggle" data-id="' + escapeHtml(it.id) + '"' + (done ? ' checked' : '') + '>' +
           '<span class="cl-label">' + escapeHtml(it.label) + '</span>' +
-          (isCustom ? '<button type="button" class="cl-remove" data-action="cl-remove" data-scope="' + scope + '" data-country="' + (countryId || '') + '" data-id="' + it.id + '" title="刪除">✕</button>' : '') +
+          (isCustom ? '<button type="button" class="cl-remove" data-action="cl-remove" data-scope="' + scope + '" data-country="' + escapeHtml(countryId || '') + '" data-id="' + escapeHtml(it.id) + '" title="刪除">✕</button>' : '') +
         '</li>'
       );
     }).join('');
@@ -1744,10 +1752,10 @@ import { createClient } from '@supabase/supabase-js';
           ? renderChecklistItemsHtml(items, 'country', id)
           : '<li class="empty-state">這個國家目前沒有需要特別準備的文件</li>';
         return (
-          '<div class="country-checklist-group" data-country="' + id + '">' +
+          '<div class="country-checklist-group" data-country="' + escapeHtml(id) + '">' +
             '<h4>' + escapeHtml(c.name) + visitLabel + ' <span class="cl-progress">(' + doneCount + '/' + items.length + ')</span></h4>' +
             '<ul class="checklist-list">' + itemsHtml + '</ul>' +
-            '<div class="checklist-add-row"><input type="text" data-action="cl-add-input" data-country="' + id + '" placeholder="+ 新增這國的項目…（按 Enter 新增）"></div>' +
+            '<div class="checklist-add-row"><input type="text" data-action="cl-add-input" data-country="' + escapeHtml(id) + '" placeholder="+ 新增這國的項目…（按 Enter 新增）"></div>' +
           '</div>'
         );
       }).join('');
@@ -1859,7 +1867,7 @@ import { createClient } from '@supabase/supabase-js';
               const mapsHtml = g.maps.map(function (m) {
                 const cat = mapCategoryInfo(m.category);
                 if (m.id === editingMapId) {
-                  return '<li class="saved-map-item saved-map-item-editing" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '">' +
+                  return '<li class="saved-map-item saved-map-item-editing" data-country="' + escapeHtml(c.id) + '" data-city="' + escapeHtml(g.id) + '" data-id="' + escapeHtml(m.id) + '">' +
                     '<input type="text" class="map-edit-city" value="' + escapeHtml(g.cityName) + '" placeholder="城市">' +
                     '<select class="map-edit-category">' + categoryOptionsHtml(cat.id) + '</select>' +
                     '<input type="text" class="map-edit-label" value="' + escapeHtml(m.label) + '" placeholder="命名">' +
@@ -1874,15 +1882,15 @@ import { createClient } from '@supabase/supabase-js';
                     '<span class="saved-map-item-label">' + escapeHtml(m.label) + '</span>' +
                   '</a>' +
                   '<span class="saved-map-item-actions">' +
-                    '<button type="button" class="map-edit" data-action="map-edit" data-id="' + m.id + '" title="編輯">✎</button>' +
-                    '<button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="移除">✕</button>' +
+                    '<button type="button" class="map-edit" data-action="map-edit" data-id="' + escapeHtml(m.id) + '" title="編輯">✎</button>' +
+                    '<button type="button" class="map-remove" data-action="map-remove" data-country="' + escapeHtml(c.id) + '" data-city="' + escapeHtml(g.id) + '" data-id="' + escapeHtml(m.id) + '" title="移除">✕</button>' +
                   '</span>' +
                 '</li>';
               }).join('');
               return (
                 '<div class="saved-map-city">' +
                   '<h5 class="saved-map-city-name">' +
-                    '<label class="maps-export-check" title="匯出時是否包含這個城市"><input type="checkbox" class="export-city-check" data-country="' + c.id + '" data-city="' + g.id + '"' + (cityChecked ? ' checked' : '') + '></label>' +
+                    '<label class="maps-export-check" title="匯出時是否包含這個城市"><input type="checkbox" class="export-city-check" data-country="' + escapeHtml(c.id) + '" data-city="' + escapeHtml(g.id) + '"' + (cityChecked ? ' checked' : '') + '></label>' +
                     '📍 ' + escapeHtml(g.cityName) +
                   '</h5>' +
                   '<ul class="saved-map-list">' + mapsHtml + '</ul>' +
@@ -1891,28 +1899,28 @@ import { createClient } from '@supabase/supabase-js';
             }).join('')
           : (cityFilterActive ? '<div class="empty-state-small">這個國家內找不到符合的城市／類別／名稱</div>' : '<div class="empty-state-small">尚未新增</div>');
         return (
-          '<div class="saved-map-group" data-country="' + c.id + '">' +
+          '<div class="saved-map-group" data-country="' + escapeHtml(c.id) + '">' +
             '<h4>' +
-              (allCityGroups.length ? '<label class="maps-export-check" title="匯出時是否包含這個國家"><input type="checkbox" class="export-country-check" data-country="' + c.id + '"' + (countryChecked ? ' checked' : '') + '></label>' : '') +
+              (allCityGroups.length ? '<label class="maps-export-check" title="匯出時是否包含這個國家"><input type="checkbox" class="export-country-check" data-country="' + escapeHtml(c.id) + '"' + (countryChecked ? ' checked' : '') + '></label>' : '') +
               flagImg(c.id) + escapeHtml(c.name) +
             '</h4>' +
             (totalSavedMaps > 1 || cityFilterActive
-              ? '<input type="search" class="map-city-filter" data-country="' + c.id + '" placeholder="搜尋這個國家的城市／類別／名稱…" value="' + escapeHtml(mapsCityFilterQuery[c.id] || '') + '">'
+              ? '<input type="search" class="map-city-filter" data-country="' + escapeHtml(c.id) + '" placeholder="搜尋這個國家的城市／類別／名稱…" value="' + escapeHtml(mapsCityFilterQuery[c.id] || '') + '">'
               : '') +
             citiesHtml +
             '<div class="saved-map-add-row">' +
-              '<input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="城市（例如：曼谷）">' +
-              '<select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml() + '</select>' +
-              '<input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="命名（例如：河景飯店，可留空）">' +
-              '<input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="貼上 Google 地圖連結">' +
-              '<button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ 新增</button>' +
-              '<button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-toggle" data-country="' + c.id + '">📋 批次貼上</button>' +
+              '<input type="text" class="map-city-input" data-field="mapCity" data-country="' + escapeHtml(c.id) + '" placeholder="城市（例如：曼谷）">' +
+              '<select class="map-category-input" data-field="mapCategory" data-country="' + escapeHtml(c.id) + '">' + categoryOptionsHtml() + '</select>' +
+              '<input type="text" class="map-label-input" data-field="mapLabel" data-country="' + escapeHtml(c.id) + '" placeholder="命名（例如：河景飯店，可留空）">' +
+              '<input type="text" class="map-url-input" data-field="mapUrl" data-country="' + escapeHtml(c.id) + '" placeholder="貼上 Google 地圖連結">' +
+              '<button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + escapeHtml(c.id) + '">+ 新增</button>' +
+              '<button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-toggle" data-country="' + escapeHtml(c.id) + '">📋 批次貼上</button>' +
             '</div>' +
             (bulkPasteOpenCountry === c.id ?
               '<div class="saved-map-bulk-row">' +
-                '<textarea class="map-bulk-textarea" data-country="' + c.id + '" rows="4" placeholder="每行一筆，格式「名稱[Tab]網址」或直接貼網址（一行一個）。上面選的城市／分類會套用到整批。"></textarea>' +
+                '<textarea class="map-bulk-textarea" data-country="' + escapeHtml(c.id) + '" rows="4" placeholder="每行一筆，格式「名稱[Tab]網址」或直接貼網址（一行一個）。上面選的城市／分類會套用到整批。"></textarea>' +
                 '<div class="saved-map-bulk-actions">' +
-                  '<button type="button" class="btn btn-small" data-action="map-bulk-add" data-country="' + c.id + '">批次新增</button>' +
+                  '<button type="button" class="btn btn-small" data-action="map-bulk-add" data-country="' + escapeHtml(c.id) + '">批次新增</button>' +
                   '<button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-cancel">取消</button>' +
                 '</div>' +
               '</div>'
@@ -1932,18 +1940,18 @@ import { createClient } from '@supabase/supabase-js';
   }
 
   function addMapFromInputs(countryId) {
-    const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
-    const categoryInput = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
-    const labelInput = document.querySelector('.map-label-input[data-country="' + countryId + '"]');
-    const urlInput = document.querySelector('.map-url-input[data-country="' + countryId + '"]');
+    const cityInput = document.querySelector('.map-city-input[data-country="' + escapeHtml(countryId) + '"]');
+    const categoryInput = document.querySelector('.map-category-input[data-country="' + escapeHtml(countryId) + '"]');
+    const labelInput = document.querySelector('.map-label-input[data-country="' + escapeHtml(countryId) + '"]');
+    const urlInput = document.querySelector('.map-url-input[data-country="' + escapeHtml(countryId) + '"]');
     if (!urlInput || !urlInput.value.trim()) return;
     addSavedMap(countryId, cityInput ? cityInput.value : '', categoryInput ? categoryInput.value : '', labelInput.value, urlInput.value);
   }
 
   function bulkAddMapsFromTextarea(countryId) {
-    const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
-    const categoryInput = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
-    const textarea = document.querySelector('.map-bulk-textarea[data-country="' + countryId + '"]');
+    const cityInput = document.querySelector('.map-city-input[data-country="' + escapeHtml(countryId) + '"]');
+    const categoryInput = document.querySelector('.map-category-input[data-country="' + escapeHtml(countryId) + '"]');
+    const textarea = document.querySelector('.map-bulk-textarea[data-country="' + escapeHtml(countryId) + '"]');
     if (!textarea) return;
     const parsed = parseBulkMapLines(textarea.value);
     const totalLines = textarea.value.split(/\r?\n/).filter(function (l) { return l.trim(); }).length;
@@ -1986,7 +1994,7 @@ import { createClient } from '@supabase/supabase-js';
     const selStart = filterInput.selectionStart, selEnd = filterInput.selectionEnd;
     mapsCityFilterQuery[countryId] = filterInput.value;
     renderMapsTab();
-    const freshInput = document.querySelector('.map-city-filter[data-country="' + countryId + '"]');
+    const freshInput = document.querySelector('.map-city-filter[data-country="' + escapeHtml(countryId) + '"]');
     if (freshInput) { freshInput.focus(); freshInput.setSelectionRange(selStart, selEnd); }
   });
   document.getElementById('mapsList').addEventListener('click', function (e) {
@@ -2008,14 +2016,14 @@ import { createClient } from '@supabase/supabase-js';
       const countryId = bulkToggle.getAttribute('data-country');
       // renderMapsTab() rebuilds the whole add-row from scratch, which would otherwise wipe
       // whatever city/category the user already picked before deciding to switch to bulk paste.
-      const cityInputBefore = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
-      const categoryInputBefore = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
+      const cityInputBefore = document.querySelector('.map-city-input[data-country="' + escapeHtml(countryId) + '"]');
+      const categoryInputBefore = document.querySelector('.map-category-input[data-country="' + escapeHtml(countryId) + '"]');
       const cityVal = cityInputBefore ? cityInputBefore.value : '';
       const categoryVal = categoryInputBefore ? categoryInputBefore.value : '';
       bulkPasteOpenCountry = bulkPasteOpenCountry === countryId ? null : countryId;
       renderMapsTab();
-      const cityInputAfter = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
-      const categoryInputAfter = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
+      const cityInputAfter = document.querySelector('.map-city-input[data-country="' + escapeHtml(countryId) + '"]');
+      const categoryInputAfter = document.querySelector('.map-category-input[data-country="' + escapeHtml(countryId) + '"]');
       if (cityInputAfter) cityInputAfter.value = cityVal;
       if (categoryInputAfter) categoryInputAfter.value = categoryVal;
       return;
@@ -2365,8 +2373,8 @@ import { createClient } from '@supabase/supabase-js';
   });
 
   function addCityFromInputs(stopId) {
-    const nameInput = document.querySelector('.city-name-input[data-stop="' + stopId + '"]');
-    const nightsInput = document.querySelector('.city-nights-input[data-stop="' + stopId + '"]');
+    const nameInput = document.querySelector('.city-name-input[data-stop="' + escapeHtml(stopId) + '"]');
+    const nightsInput = document.querySelector('.city-nights-input[data-stop="' + escapeHtml(stopId) + '"]');
     const name = nameInput.value.trim();
     if (!name) return;
     addCity(stopId, name, nightsInput.value);
@@ -2425,7 +2433,7 @@ import { createClient } from '@supabase/supabase-js';
   });
 
   function focusStopDateInput(id) {
-    const el = document.querySelector('.route-item[data-id="' + id + '"] input[data-action="date-arrive"]');
+    const el = document.querySelector('.route-item[data-id="' + escapeHtml(id) + '"] input[data-action="date-arrive"]');
     if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
   }
 
@@ -3191,13 +3199,13 @@ import { createClient } from '@supabase/supabase-js';
       const subtotal = livingConverted + visaConverted;
       grandTotal += subtotal;
 
-      return '<tr data-id="' + id + '" data-country="' + stop.countryId + '">' +
+      return '<tr data-id="' + escapeHtml(id) + '" data-country="' + escapeHtml(stop.countryId) + '">' +
         '<td>' + escapeHtml(c.name) + '</td>' +
-        '<td><input type="number" min="0" data-field="nights" data-id="' + id + '" value="' + (sb.nights !== null && sb.nights !== undefined ? sb.nights : '') + '" placeholder="' + (autoNights !== null ? autoNights : 0) + '"></td>' +
-        '<td><select data-field="currency" data-id="' + id + '">' + currencyOptionsHtml(sb.currency, codes) + '</select></td>' +
-        '<td><input type="number" min="0" data-field="accom" data-id="' + id + '" value="' + (sb.accom || '') + '"></td>' +
-        '<td><input type="number" min="0" data-field="daily" data-id="' + id + '" value="' + (sb.daily || '') + '"></td>' +
-        '<td><input type="number" min="0" data-field="transport" data-id="' + id + '" value="' + (sb.transport || '') + '"></td>' +
+        '<td><input type="number" min="0" data-field="nights" data-id="' + escapeHtml(id) + '" value="' + (sb.nights !== null && sb.nights !== undefined ? sb.nights : '') + '" placeholder="' + (autoNights !== null ? autoNights : 0) + '"></td>' +
+        '<td><select data-field="currency" data-id="' + escapeHtml(id) + '">' + currencyOptionsHtml(sb.currency, codes) + '</select></td>' +
+        '<td><input type="number" min="0" data-field="accom" data-id="' + escapeHtml(id) + '" value="' + (sb.accom || '') + '"></td>' +
+        '<td><input type="number" min="0" data-field="daily" data-id="' + escapeHtml(id) + '" value="' + (sb.daily || '') + '"></td>' +
+        '<td><input type="number" min="0" data-field="transport" data-id="' + escapeHtml(id) + '" value="' + (sb.transport || '') + '"></td>' +
         '<td class="num visa-fee-cell">' + visaText + '</td>' +
         '<td class="num subtotal">' + home + ' ' + fmtMoney(subtotal) + '</td>' +
       '</tr>';
@@ -3290,19 +3298,19 @@ import { createClient } from '@supabase/supabase-js';
     const cardsList = document.getElementById('ec_cardsList');
     cardsList.innerHTML = ec.cards.length ? ec.cards.map(function (row) {
       return '<div class="emergency-row">' +
-        '<input type="text" data-ecrow="cards" data-ecfield="label" data-id="' + row.id + '" placeholder="卡片名稱（例如：OO銀行 Visa）" value="' + escapeHtml(row.label || '') + '">' +
-        '<input type="text" data-ecrow="cards" data-ecfield="phone" data-id="' + row.id + '" placeholder="海外掛失電話" value="' + escapeHtml(row.phone || '') + '">' +
-        '<button type="button" class="btn btn-small btn-ghost" data-action="ec-remove-card" data-id="' + row.id + '">移除</button>' +
+        '<input type="text" data-ecrow="cards" data-ecfield="label" data-id="' + escapeHtml(row.id) + '" placeholder="卡片名稱（例如：OO銀行 Visa）" value="' + escapeHtml(row.label || '') + '">' +
+        '<input type="text" data-ecrow="cards" data-ecfield="phone" data-id="' + escapeHtml(row.id) + '" placeholder="海外掛失電話" value="' + escapeHtml(row.phone || '') + '">' +
+        '<button type="button" class="btn btn-small btn-ghost" data-action="ec-remove-card" data-id="' + escapeHtml(row.id) + '">移除</button>' +
       '</div>';
     }).join('') : '<div class="empty-state-small">尚未新增</div>';
 
     const contactsList = document.getElementById('ec_contactsList');
     contactsList.innerHTML = ec.contacts.length ? ec.contacts.map(function (row) {
       return '<div class="emergency-row">' +
-        '<input type="text" data-ecrow="contacts" data-ecfield="name" data-id="' + row.id + '" placeholder="姓名" value="' + escapeHtml(row.name || '') + '">' +
-        '<input type="text" data-ecrow="contacts" data-ecfield="relation" data-id="' + row.id + '" placeholder="關係" value="' + escapeHtml(row.relation || '') + '">' +
-        '<input type="text" data-ecrow="contacts" data-ecfield="phone" data-id="' + row.id + '" placeholder="電話" value="' + escapeHtml(row.phone || '') + '">' +
-        '<button type="button" class="btn btn-small btn-ghost" data-action="ec-remove-contact" data-id="' + row.id + '">移除</button>' +
+        '<input type="text" data-ecrow="contacts" data-ecfield="name" data-id="' + escapeHtml(row.id) + '" placeholder="姓名" value="' + escapeHtml(row.name || '') + '">' +
+        '<input type="text" data-ecrow="contacts" data-ecfield="relation" data-id="' + escapeHtml(row.id) + '" placeholder="關係" value="' + escapeHtml(row.relation || '') + '">' +
+        '<input type="text" data-ecrow="contacts" data-ecfield="phone" data-id="' + escapeHtml(row.id) + '" placeholder="電話" value="' + escapeHtml(row.phone || '') + '">' +
+        '<button type="button" class="btn btn-small btn-ghost" data-action="ec-remove-contact" data-id="' + escapeHtml(row.id) + '">移除</button>' +
       '</div>';
     }).join('') : '<div class="empty-state-small">尚未新增</div>';
   }

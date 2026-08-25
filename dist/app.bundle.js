@@ -25314,6 +25314,14 @@ ${suffix}`;
       ["checklist", "budget", "emergencyCard"].forEach(function(key) {
         merged[key] = Object.assign({}, defaults[key], saved && saved[key] || {});
       });
+      merged.emergencyCard = Object.assign({}, merged.emergencyCard, {
+        cards: Array.isArray(merged.emergencyCard.cards) ? merged.emergencyCard.cards.filter(function(r) {
+          return r && typeof r === "object";
+        }) : [],
+        contacts: Array.isArray(merged.emergencyCard.contacts) ? merged.emergencyCard.contacts.filter(function(r) {
+          return r && typeof r === "object";
+        }) : []
+      });
       if (Array.isArray(merged.customCountries)) {
         merged.customCountries = merged.customCountries.map(sanitizeCountryFields);
       }
@@ -26216,11 +26224,11 @@ ${suffix}`;
         const heritageDetail = heritageCount ? '<details class="card-heritage"><summary>\u{1F3DB} ' + heritageCount + ' \u9805\u4E16\u754C\u907A\u7522</summary><ul class="heritage-list">' + c.heritageSites.map(function(s) {
           return "<li>" + escapeHtml(s) + "</li>";
         }).join("") + "</ul></details>" : "";
-        return '<div class="country-card' + highlighted + '" data-id="' + c.id + '"><div class="card-top"><div><div class="card-name">' + flagImg(c.id) + escapeHtml(c.name) + "</div>" + (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + "</div>" : "") + '</div><div class="card-badges">' + passportBadge + '<span class="badge badge-' + escapeHtml(c.visaType) + '">' + escapeHtml(VISA_LABELS[c.visaType] || c.visaType) + "</span>" + safetyBadge + heritageBadge + vaccineBadge + '</div></div><div class="card-meta">' + metaBits.map(function(b) {
+        return '<div class="country-card' + highlighted + '" data-id="' + escapeHtml(c.id) + '"><div class="card-top"><div><div class="card-name">' + flagImg(c.id) + escapeHtml(c.name) + "</div>" + (c.nameEn ? '<div class="card-name-en">' + escapeHtml(c.nameEn) + "</div>" : "") + '</div><div class="card-badges">' + passportBadge + '<span class="badge badge-' + escapeHtml(c.visaType) + '">' + escapeHtml(VISA_LABELS[c.visaType] || c.visaType) + "</span>" + safetyBadge + heritageBadge + vaccineBadge + '</div></div><div class="card-meta">' + metaBits.map(function(b) {
           return "<span>" + escapeHtml(b) + "</span>";
-        }).join("") + "</div>" + powerLine + driveLine + seasonLine + note + safetyNoteLine + healthNoteLine + personal + heritageDetail + '<div class="card-bottom"><select class="status-select" data-action="status" data-id="' + c.id + '">' + Object.keys(STATUS_LABELS).map(function(k) {
+        }).join("") + "</div>" + powerLine + driveLine + seasonLine + note + safetyNoteLine + healthNoteLine + personal + heritageDetail + '<div class="card-bottom"><select class="status-select" data-action="status" data-id="' + escapeHtml(c.id) + '">' + Object.keys(STATUS_LABELS).map(function(k) {
           return '<option value="' + k + '"' + (k === status ? " selected" : "") + ">" + STATUS_LABELS[k] + "</option>";
-        }).join("") + '</select><div class="card-actions">' + (routeCount ? '<span class="route-count-badge">\u8DEF\u7DDA\u4E2D\xD7' + routeCount + "</span>" : "") + '<button class="btn btn-small btn-primary" data-action="add-route" data-id="' + c.id + '">' + (routeCount ? "\uFF0B \u518D\u6B21\u52A0\u5165" : "\uFF0B \u52A0\u5165\u8DEF\u7DDA") + '</button><button class="btn btn-small btn-ghost" data-action="edit" data-id="' + c.id + '">\u7DE8\u8F2F</button></div></div></div>';
+        }).join("") + '</select><div class="card-actions">' + (routeCount ? '<span class="route-count-badge">\u8DEF\u7DDA\u4E2D\xD7' + routeCount + "</span>" : "") + '<button class="btn btn-small btn-primary" data-action="add-route" data-id="' + escapeHtml(c.id) + '">' + (routeCount ? "\uFF0B \u518D\u6B21\u52A0\u5165" : "\uFF0B \u52A0\u5165\u8DEF\u7DDA") + '</button><button class="btn btn-small btn-ghost" data-action="edit" data-id="' + escapeHtml(c.id) + '">\u7DE8\u8F2F</button></div></div></div>';
       }).join("");
       animate(grid.querySelectorAll(".country-card"), { opacity: [0, 1], y: [8, 0] }, { duration: 0.25, delay: stagger(0.03), ease: "ease-out" });
     }
@@ -26242,12 +26250,12 @@ ${suffix}`;
       }
       const chips = cities.map(function(c, idx) {
         if (editingCityKey === stopId + ":" + c.id) {
-          return '<span class="city-chip city-chip-editing" data-stop="' + stopId + '" data-city="' + c.id + '"><input type="text" class="city-edit-name" value="' + escapeHtml(c.name) + '" placeholder="\u57CE\u5E02\u540D\u7A31"><input type="number" class="city-edit-nights" min="0" value="' + (c.nights || "") + '" placeholder="\u665A\u6578"><button type="button" class="btn btn-small" data-action="city-edit-save">\u5132\u5B58</button><button type="button" class="btn btn-small btn-ghost" data-action="city-edit-cancel">\u53D6\u6D88</button></span>';
+          return '<span class="city-chip city-chip-editing" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '"><input type="text" class="city-edit-name" value="' + escapeHtml(c.name) + '" placeholder="\u57CE\u5E02\u540D\u7A31"><input type="number" class="city-edit-nights" min="0" value="' + (c.nights || "") + '" placeholder="\u665A\u6578"><button type="button" class="btn btn-small" data-action="city-edit-save">\u5132\u5B58</button><button type="button" class="btn btn-small btn-ghost" data-action="city-edit-cancel">\u53D6\u6D88</button></span>';
         }
         const geoIcon = c.geocodeStatus === "ok" ? '<span class="city-geo ok" title="\u5DF2\u5B9A\u4F4D\uFF0C\u6703\u7528\u65BC\u8DDD\u96E2\u4F30\u7B97">\u{1F4CD}</span>' : c.geocodeStatus === "pending" ? '<span class="city-geo pending" title="\u6B63\u5728\u5B9A\u4F4D\u2026">\u22EF</span>' : c.geocodeStatus === "error" ? '<span class="city-geo error" title="\u627E\u4E0D\u5230\u5EA7\u6A19\uFF0C\u66AB\u7528\u570B\u5BB6\u4E2D\u5FC3\u9EDE\u4F30\u7B97\u8DDD\u96E2">\u26A0</span>' : "";
-        return '<span class="city-chip"><span class="city-move-btns"><button type="button" class="city-move" data-action="city-move-up" data-stop="' + stopId + '" data-city="' + c.id + '"' + (idx === 0 ? " disabled" : "") + '>\u25B2</button><button type="button" class="city-move" data-action="city-move-down" data-stop="' + stopId + '" data-city="' + c.id + '"' + (idx === cities.length - 1 ? " disabled" : "") + ">\u25BC</button></span>" + geoIcon + escapeHtml(c.name) + (c.nights ? " <b>" + c.nights + "\u665A</b>" : "") + '<button type="button" class="city-edit" data-action="city-edit" data-stop="' + stopId + '" data-city="' + c.id + '" title="\u7DE8\u8F2F">\u270E</button><button type="button" class="city-remove" data-action="city-remove" data-stop="' + stopId + '" data-city="' + c.id + '" title="\u79FB\u9664">\u2715</button></span>';
+        return '<span class="city-chip"><span class="city-move-btns"><button type="button" class="city-move" data-action="city-move-up" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '"' + (idx === 0 ? " disabled" : "") + '>\u25B2</button><button type="button" class="city-move" data-action="city-move-down" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '"' + (idx === cities.length - 1 ? " disabled" : "") + ">\u25BC</button></span>" + geoIcon + escapeHtml(c.name) + (c.nights ? " <b>" + c.nights + "\u665A</b>" : "") + '<button type="button" class="city-edit" data-action="city-edit" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '" title="\u7DE8\u8F2F">\u270E</button><button type="button" class="city-remove" data-action="city-remove" data-stop="' + escapeHtml(stopId) + '" data-city="' + escapeHtml(c.id) + '" title="\u79FB\u9664">\u2715</button></span>';
       }).join("");
-      return '<div class="city-section"><div class="city-header">\u{1F3D9} \u57CE\u5E02\u6E05\u55AE' + (cities.length ? "\uFF08" + cities.length + "\uFF09" + mismatch : "") + "</div>" + (chips ? '<div class="city-chips">' + chips + "</div>" : "") + '<div class="city-add-row"><input type="text" class="city-name-input" data-field="cityName" data-stop="' + stopId + '" placeholder="\u57CE\u5E02\u540D\u7A31"><input type="number" class="city-nights-input" data-field="cityNights" data-stop="' + stopId + '" min="0" placeholder="\u665A\u6578"><button type="button" class="btn btn-small btn-ghost" data-action="city-add" data-stop="' + stopId + '">+ \u65B0\u589E</button></div></div>';
+      return '<div class="city-section"><div class="city-header">\u{1F3D9} \u57CE\u5E02\u6E05\u55AE' + (cities.length ? "\uFF08" + cities.length + "\uFF09" + mismatch : "") + "</div>" + (chips ? '<div class="city-chips">' + chips + "</div>" : "") + '<div class="city-add-row"><input type="text" class="city-name-input" data-field="cityName" data-stop="' + escapeHtml(stopId) + '" placeholder="\u57CE\u5E02\u540D\u7A31"><input type="number" class="city-nights-input" data-field="cityNights" data-stop="' + escapeHtml(stopId) + '" min="0" placeholder="\u665A\u6578"><button type="button" class="btn btn-small btn-ghost" data-action="city-add" data-stop="' + escapeHtml(stopId) + '">+ \u65B0\u589E</button></div></div>';
     }
     const HOME_PLUG_TYPES = ["A", "B"];
     function computeRouteAdapterTypes() {
@@ -26288,7 +26296,7 @@ ${suffix}`;
             if (leg) {
               const isAuto = !state.legTransport[id];
               const cityBadge = leg.usedCity ? '<span class="leg-city-badge" title="\u4F9D\u57CE\u5E02\u5EA7\u6A19\u4F30\u7B97\uFF1A' + escapeHtml(leg.fromCity || prev.name) + " \u2192 " + escapeHtml(leg.toCity || c.name) + '">\u{1F3D9}</span>' : "";
-              legLine = '<div class="leg-line">' + TRANSPORT_ICONS[leg.mode] + " \u8DDD\u4E0A\u4E00\u7AD9 " + fmtKm(leg.km) + " \xB7 \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + cityBadge + '<select class="leg-mode-select" data-action="leg-mode" data-id="' + id + '"><option value="auto"' + (isAuto ? " selected" : "") + '>\u81EA\u52D5\u5EFA\u8B70</option><option value="flight"' + (!isAuto && leg.mode === "flight" ? " selected" : "") + '>\u2708 \u98DB\u6A5F</option><option value="land"' + (!isAuto && leg.mode === "land" ? " selected" : "") + '>\u{1F68C} \u9678\u8DEF</option><option value="sea"' + (!isAuto && leg.mode === "sea" ? " selected" : "") + ">\u26F4 \u6D77\u8DEF</option></select></div>";
+              legLine = '<div class="leg-line">' + TRANSPORT_ICONS[leg.mode] + " \u8DDD\u4E0A\u4E00\u7AD9 " + fmtKm(leg.km) + " \xB7 \u9810\u4F30" + TRANSPORT_LABELS[leg.mode] + " " + fmtHours(leg.hours) + cityBadge + '<select class="leg-mode-select" data-action="leg-mode" data-id="' + escapeHtml(id) + '"><option value="auto"' + (isAuto ? " selected" : "") + '>\u81EA\u52D5\u5EFA\u8B70</option><option value="flight"' + (!isAuto && leg.mode === "flight" ? " selected" : "") + '>\u2708 \u98DB\u6A5F</option><option value="land"' + (!isAuto && leg.mode === "land" ? " selected" : "") + '>\u{1F68C} \u9678\u8DEF</option><option value="sea"' + (!isAuto && leg.mode === "sea" ? " selected" : "") + ">\u26F4 \u6D77\u8DEF</option></select></div>";
             }
           }
           const visitLabel = state.route.filter(function(r, i) {
@@ -26298,7 +26306,7 @@ ${suffix}`;
           }).length + "\u6B21\uFF09" : "";
           const timeInfo = getLocalTimeInfo(c.tz);
           const timeLine = timeInfo ? '<div class="local-time" data-tz="' + escapeHtml(c.tz) + '">\u{1F550} ' + timeInfo.timeStr + (timeInfo.diffLabel ? "\uFF08" + timeInfo.diffLabel + "\uFF09" : "") + "</div>" : "";
-          return '<li class="route-item" data-id="' + id + '"><span class="order" style="color:' + orderColor(idx) + '">' + (idx + 1) + '</span><div class="info"><div class="name">' + flagImg(c.id) + escapeHtml(c.name) + visitLabel + '</div><div class="fee">' + VISA_LABELS[c.visaType] + (fee ? " \xB7 " + escapeHtml(fee) : "") + (duration !== null ? " \xB7 " + duration + "\u5929" : "") + "</div>" + timeLine + legLine + '</div><div class="move-btns"><button data-action="move-up" data-id="' + id + '" ' + (idx === 0 ? "disabled" : "") + '>\u25B2</button><button data-action="move-down" data-id="' + id + '" ' + (idx === state.route.length - 1 ? "disabled" : "") + '>\u25BC</button></div><button class="btn btn-small btn-ghost" data-action="remove-route" data-id="' + id + '">\u79FB\u9664</button><div class="date-row"><input type="date" data-action="date-arrive" data-id="' + id + '" value="' + (sched.arrive || "") + '"><span class="date-sep">\u2192</span><input type="date" data-action="date-depart" data-id="' + id + '" value="' + (sched.depart || "") + '"></div>' + warning2 + renderCitySectionHtml(id, duration, c) + "</li>";
+          return '<li class="route-item" data-id="' + escapeHtml(id) + '"><span class="order" style="color:' + orderColor(idx) + '">' + (idx + 1) + '</span><div class="info"><div class="name">' + flagImg(c.id) + escapeHtml(c.name) + visitLabel + '</div><div class="fee">' + VISA_LABELS[c.visaType] + (fee ? " \xB7 " + escapeHtml(fee) : "") + (duration !== null ? " \xB7 " + duration + "\u5929" : "") + "</div>" + timeLine + legLine + '</div><div class="move-btns"><button data-action="move-up" data-id="' + escapeHtml(id) + '" ' + (idx === 0 ? "disabled" : "") + '>\u25B2</button><button data-action="move-down" data-id="' + escapeHtml(id) + '" ' + (idx === state.route.length - 1 ? "disabled" : "") + '>\u25BC</button></div><button class="btn btn-small btn-ghost" data-action="remove-route" data-id="' + escapeHtml(id) + '">\u79FB\u9664</button><div class="date-row"><input type="date" data-action="date-arrive" data-id="' + escapeHtml(id) + '" value="' + (sched.arrive || "") + '"><span class="date-sep">\u2192</span><input type="date" data-action="date-depart" data-id="' + escapeHtml(id) + '" value="' + (sched.depart || "") + '"></div>' + warning2 + renderCitySectionHtml(id, duration, c) + "</li>";
         }).join("");
         const totals = {};
         let unknownCount = 0;
@@ -26398,7 +26406,7 @@ ${suffix}`;
       const sc = computeSchedule();
       const scheduled = sc.scheduled, unscheduled = sc.unscheduled;
       unscheduledEl.innerHTML = unscheduled.map(function(s) {
-        return '<button type="button" class="timeline-chip" data-id="' + s.id + '">' + escapeHtml(s.country.name) + " \u672A\u6392\u5B9A</button>";
+        return '<button type="button" class="timeline-chip" data-id="' + escapeHtml(s.id) + '">' + escapeHtml(s.country.name) + " \u672A\u6392\u5B9A</button>";
       }).join("");
       renderTimelineStats(sc);
       renderActivityLog();
@@ -26454,7 +26462,7 @@ ${suffix}`;
         if (isOverstay) cls.push("overstay");
         if (isOverlap) cls.push("overlap");
         const tip = s.country.name + " " + s.sched.arrive + " \u2192 " + s.sched.depart + "\uFF08" + s.duration + "\u5929\uFF09" + (isOverstay ? " \u26A0\u8D85\u904E\u5929\u6578\u4E0A\u9650" : "") + (isOverlap ? " \u26A0\u8207\u524D\u4E00\u7AD9\u65E5\u671F\u91CD\u758A" : "");
-        rowsHtml += '<div class="timeline-row"><div class="' + cls.join(" ") + '" data-id="' + s.id + '" style="left:' + left + "px;width:" + width + "px;color:" + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '"><span class="order">' + (routeIdx + 1) + "</span><span>" + escapeHtml(s.country.name) + "</span><span>" + s.duration + "\u5929</span></div></div>";
+        rowsHtml += '<div class="timeline-row"><div class="' + cls.join(" ") + '" data-id="' + escapeHtml(s.id) + '" style="left:' + left + "px;width:" + width + "px;color:" + orderColor(routeIdx) + '" title="' + escapeHtml(tip) + '"><span class="order">' + (routeIdx + 1) + "</span><span>" + escapeHtml(s.country.name) + "</span><span>" + s.duration + "\u5929</span></div></div>";
       });
       track.style.width = trackWidth + "px";
       track.innerHTML = gridHtml + '<div class="timeline-rows">' + rowsHtml + "</div>";
@@ -26577,7 +26585,7 @@ ${suffix}`;
       else state.checklist.done[id] = true;
       saveState();
       renderChecklist();
-      const li = document.querySelector('.checklist-item[data-id="' + id + '"]');
+      const li = document.querySelector('.checklist-item[data-id="' + escapeHtml(id) + '"]');
       if (li) animate(li, { scale: [1, 1.04, 1] }, { duration: 0.22, ease: "ease-out" });
     }
     function addChecklistItem(scope, countryId, label) {
@@ -26609,7 +26617,7 @@ ${suffix}`;
       return items.map(function(it) {
         const isCustom = it.id.indexOf("gc_") === 0 || it.id.indexOf("cc_") === 0;
         const done = !!state.checklist.done[it.id];
-        return '<li class="checklist-item' + (done ? " done" : "") + '" data-id="' + it.id + '"><input type="checkbox" data-action="cl-toggle" data-id="' + it.id + '"' + (done ? " checked" : "") + '><span class="cl-label">' + escapeHtml(it.label) + "</span>" + (isCustom ? '<button type="button" class="cl-remove" data-action="cl-remove" data-scope="' + scope + '" data-country="' + (countryId || "") + '" data-id="' + it.id + '" title="\u522A\u9664">\u2715</button>' : "") + "</li>";
+        return '<li class="checklist-item' + (done ? " done" : "") + '" data-id="' + escapeHtml(it.id) + '"><input type="checkbox" data-action="cl-toggle" data-id="' + escapeHtml(it.id) + '"' + (done ? " checked" : "") + '><span class="cl-label">' + escapeHtml(it.label) + "</span>" + (isCustom ? '<button type="button" class="cl-remove" data-action="cl-remove" data-scope="' + scope + '" data-country="' + escapeHtml(countryId || "") + '" data-id="' + escapeHtml(it.id) + '" title="\u522A\u9664">\u2715</button>' : "") + "</li>";
       }).join("");
     }
     function renderChecklist() {
@@ -26635,7 +26643,7 @@ ${suffix}`;
             return state.checklist.done[it.id];
           }).length;
           const itemsHtml = items.length ? renderChecklistItemsHtml(items, "country", id) : '<li class="empty-state">\u9019\u500B\u570B\u5BB6\u76EE\u524D\u6C92\u6709\u9700\u8981\u7279\u5225\u6E96\u5099\u7684\u6587\u4EF6</li>';
-          return '<div class="country-checklist-group" data-country="' + id + '"><h4>' + escapeHtml(c.name) + visitLabel + ' <span class="cl-progress">(' + doneCount + "/" + items.length + ')</span></h4><ul class="checklist-list">' + itemsHtml + '</ul><div class="checklist-add-row"><input type="text" data-action="cl-add-input" data-country="' + id + '" placeholder="+ \u65B0\u589E\u9019\u570B\u7684\u9805\u76EE\u2026\uFF08\u6309 Enter \u65B0\u589E\uFF09"></div></div>';
+          return '<div class="country-checklist-group" data-country="' + escapeHtml(id) + '"><h4>' + escapeHtml(c.name) + visitLabel + ' <span class="cl-progress">(' + doneCount + "/" + items.length + ')</span></h4><ul class="checklist-list">' + itemsHtml + '</ul><div class="checklist-add-row"><input type="text" data-action="cl-add-input" data-country="' + escapeHtml(id) + '" placeholder="+ \u65B0\u589E\u9019\u570B\u7684\u9805\u76EE\u2026\uFF08\u6309 Enter \u65B0\u589E\uFF09"></div></div>';
         }).join("");
       }
       const allItems = generalItems.concat(state.route.reduce(function(acc, stop) {
@@ -26732,13 +26740,13 @@ ${suffix}`;
             const mapsHtml = g.maps.map(function(m) {
               const cat = mapCategoryInfo(m.category);
               if (m.id === editingMapId) {
-                return '<li class="saved-map-item saved-map-item-editing" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '"><input type="text" class="map-edit-city" value="' + escapeHtml(g.cityName) + '" placeholder="\u57CE\u5E02"><select class="map-edit-category">' + categoryOptionsHtml(cat.id) + '</select><input type="text" class="map-edit-label" value="' + escapeHtml(m.label) + '" placeholder="\u547D\u540D"><input type="text" class="map-edit-url" value="' + escapeHtml(m.url) + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small" data-action="map-edit-save">\u5132\u5B58</button><button type="button" class="btn btn-small btn-ghost" data-action="map-edit-cancel">\u53D6\u6D88</button></li>';
+                return '<li class="saved-map-item saved-map-item-editing" data-country="' + escapeHtml(c.id) + '" data-city="' + escapeHtml(g.id) + '" data-id="' + escapeHtml(m.id) + '"><input type="text" class="map-edit-city" value="' + escapeHtml(g.cityName) + '" placeholder="\u57CE\u5E02"><select class="map-edit-category">' + categoryOptionsHtml(cat.id) + '</select><input type="text" class="map-edit-label" value="' + escapeHtml(m.label) + '" placeholder="\u547D\u540D"><input type="text" class="map-edit-url" value="' + escapeHtml(m.url) + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small" data-action="map-edit-save">\u5132\u5B58</button><button type="button" class="btn btn-small btn-ghost" data-action="map-edit-cancel">\u53D6\u6D88</button></li>';
               }
-              return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer"><span class="map-category-badge cat-' + cat.id + '">' + cat.icon + " " + escapeHtml(cat.label) + '</span><span class="saved-map-item-label">' + escapeHtml(m.label) + '</span></a><span class="saved-map-item-actions"><button type="button" class="map-edit" data-action="map-edit" data-id="' + m.id + '" title="\u7DE8\u8F2F">\u270E</button><button type="button" class="map-remove" data-action="map-remove" data-country="' + c.id + '" data-city="' + g.id + '" data-id="' + m.id + '" title="\u79FB\u9664">\u2715</button></span></li>';
+              return '<li class="saved-map-item"><a href="' + escapeHtml(m.url) + '" target="_blank" rel="noopener noreferrer"><span class="map-category-badge cat-' + cat.id + '">' + cat.icon + " " + escapeHtml(cat.label) + '</span><span class="saved-map-item-label">' + escapeHtml(m.label) + '</span></a><span class="saved-map-item-actions"><button type="button" class="map-edit" data-action="map-edit" data-id="' + escapeHtml(m.id) + '" title="\u7DE8\u8F2F">\u270E</button><button type="button" class="map-remove" data-action="map-remove" data-country="' + escapeHtml(c.id) + '" data-city="' + escapeHtml(g.id) + '" data-id="' + escapeHtml(m.id) + '" title="\u79FB\u9664">\u2715</button></span></li>';
             }).join("");
-            return '<div class="saved-map-city"><h5 class="saved-map-city-name"><label class="maps-export-check" title="\u532F\u51FA\u6642\u662F\u5426\u5305\u542B\u9019\u500B\u57CE\u5E02"><input type="checkbox" class="export-city-check" data-country="' + c.id + '" data-city="' + g.id + '"' + (cityChecked ? " checked" : "") + "></label>\u{1F4CD} " + escapeHtml(g.cityName) + '</h5><ul class="saved-map-list">' + mapsHtml + "</ul></div>";
+            return '<div class="saved-map-city"><h5 class="saved-map-city-name"><label class="maps-export-check" title="\u532F\u51FA\u6642\u662F\u5426\u5305\u542B\u9019\u500B\u57CE\u5E02"><input type="checkbox" class="export-city-check" data-country="' + escapeHtml(c.id) + '" data-city="' + escapeHtml(g.id) + '"' + (cityChecked ? " checked" : "") + "></label>\u{1F4CD} " + escapeHtml(g.cityName) + '</h5><ul class="saved-map-list">' + mapsHtml + "</ul></div>";
           }).join("") : cityFilterActive ? '<div class="empty-state-small">\u9019\u500B\u570B\u5BB6\u5167\u627E\u4E0D\u5230\u7B26\u5408\u7684\u57CE\u5E02\uFF0F\u985E\u5225\uFF0F\u540D\u7A31</div>' : '<div class="empty-state-small">\u5C1A\u672A\u65B0\u589E</div>';
-          return '<div class="saved-map-group" data-country="' + c.id + '"><h4>' + (allCityGroups.length ? '<label class="maps-export-check" title="\u532F\u51FA\u6642\u662F\u5426\u5305\u542B\u9019\u500B\u570B\u5BB6"><input type="checkbox" class="export-country-check" data-country="' + c.id + '"' + (countryChecked ? " checked" : "") + "></label>" : "") + flagImg(c.id) + escapeHtml(c.name) + "</h4>" + (totalSavedMaps > 1 || cityFilterActive ? '<input type="search" class="map-city-filter" data-country="' + c.id + '" placeholder="\u641C\u5C0B\u9019\u500B\u570B\u5BB6\u7684\u57CE\u5E02\uFF0F\u985E\u5225\uFF0F\u540D\u7A31\u2026" value="' + escapeHtml(mapsCityFilterQuery[c.id] || "") + '">' : "") + citiesHtml + '<div class="saved-map-add-row"><input type="text" class="map-city-input" data-field="mapCity" data-country="' + c.id + '" placeholder="\u57CE\u5E02\uFF08\u4F8B\u5982\uFF1A\u66FC\u8C37\uFF09"><select class="map-category-input" data-field="mapCategory" data-country="' + c.id + '">' + categoryOptionsHtml() + '</select><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + c.id + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u6CB3\u666F\u98EF\u5E97\uFF0C\u53EF\u7559\u7A7A\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + c.id + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + c.id + '">+ \u65B0\u589E</button><button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-toggle" data-country="' + c.id + '">\u{1F4CB} \u6279\u6B21\u8CBC\u4E0A</button></div>' + (bulkPasteOpenCountry === c.id ? '<div class="saved-map-bulk-row"><textarea class="map-bulk-textarea" data-country="' + c.id + '" rows="4" placeholder="\u6BCF\u884C\u4E00\u7B46\uFF0C\u683C\u5F0F\u300C\u540D\u7A31[Tab]\u7DB2\u5740\u300D\u6216\u76F4\u63A5\u8CBC\u7DB2\u5740\uFF08\u4E00\u884C\u4E00\u500B\uFF09\u3002\u4E0A\u9762\u9078\u7684\u57CE\u5E02\uFF0F\u5206\u985E\u6703\u5957\u7528\u5230\u6574\u6279\u3002"></textarea><div class="saved-map-bulk-actions"><button type="button" class="btn btn-small" data-action="map-bulk-add" data-country="' + c.id + '">\u6279\u6B21\u65B0\u589E</button><button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-cancel">\u53D6\u6D88</button></div></div>' : "") + "</div>";
+          return '<div class="saved-map-group" data-country="' + escapeHtml(c.id) + '"><h4>' + (allCityGroups.length ? '<label class="maps-export-check" title="\u532F\u51FA\u6642\u662F\u5426\u5305\u542B\u9019\u500B\u570B\u5BB6"><input type="checkbox" class="export-country-check" data-country="' + escapeHtml(c.id) + '"' + (countryChecked ? " checked" : "") + "></label>" : "") + flagImg(c.id) + escapeHtml(c.name) + "</h4>" + (totalSavedMaps > 1 || cityFilterActive ? '<input type="search" class="map-city-filter" data-country="' + escapeHtml(c.id) + '" placeholder="\u641C\u5C0B\u9019\u500B\u570B\u5BB6\u7684\u57CE\u5E02\uFF0F\u985E\u5225\uFF0F\u540D\u7A31\u2026" value="' + escapeHtml(mapsCityFilterQuery[c.id] || "") + '">' : "") + citiesHtml + '<div class="saved-map-add-row"><input type="text" class="map-city-input" data-field="mapCity" data-country="' + escapeHtml(c.id) + '" placeholder="\u57CE\u5E02\uFF08\u4F8B\u5982\uFF1A\u66FC\u8C37\uFF09"><select class="map-category-input" data-field="mapCategory" data-country="' + escapeHtml(c.id) + '">' + categoryOptionsHtml() + '</select><input type="text" class="map-label-input" data-field="mapLabel" data-country="' + escapeHtml(c.id) + '" placeholder="\u547D\u540D\uFF08\u4F8B\u5982\uFF1A\u6CB3\u666F\u98EF\u5E97\uFF0C\u53EF\u7559\u7A7A\uFF09"><input type="text" class="map-url-input" data-field="mapUrl" data-country="' + escapeHtml(c.id) + '" placeholder="\u8CBC\u4E0A Google \u5730\u5716\u9023\u7D50"><button type="button" class="btn btn-small btn-ghost" data-action="map-add" data-country="' + escapeHtml(c.id) + '">+ \u65B0\u589E</button><button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-toggle" data-country="' + escapeHtml(c.id) + '">\u{1F4CB} \u6279\u6B21\u8CBC\u4E0A</button></div>' + (bulkPasteOpenCountry === c.id ? '<div class="saved-map-bulk-row"><textarea class="map-bulk-textarea" data-country="' + escapeHtml(c.id) + '" rows="4" placeholder="\u6BCF\u884C\u4E00\u7B46\uFF0C\u683C\u5F0F\u300C\u540D\u7A31[Tab]\u7DB2\u5740\u300D\u6216\u76F4\u63A5\u8CBC\u7DB2\u5740\uFF08\u4E00\u884C\u4E00\u500B\uFF09\u3002\u4E0A\u9762\u9078\u7684\u57CE\u5E02\uFF0F\u5206\u985E\u6703\u5957\u7528\u5230\u6574\u6279\u3002"></textarea><div class="saved-map-bulk-actions"><button type="button" class="btn btn-small" data-action="map-bulk-add" data-country="' + escapeHtml(c.id) + '">\u6279\u6B21\u65B0\u589E</button><button type="button" class="btn btn-small btn-ghost" data-action="map-bulk-cancel">\u53D6\u6D88</button></div></div>' : "") + "</div>";
         }).join("");
       }
       const savedCountryCount = Object.keys(state.savedMaps).length;
@@ -26751,17 +26759,17 @@ ${suffix}`;
       if (countEl) countEl.textContent = allExportRows.length ? "\u5DF2\u9078 " + selectedCount + " / " + allExportRows.length + " \u7B46" : "";
     }
     function addMapFromInputs(countryId) {
-      const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
-      const categoryInput = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
-      const labelInput = document.querySelector('.map-label-input[data-country="' + countryId + '"]');
-      const urlInput = document.querySelector('.map-url-input[data-country="' + countryId + '"]');
+      const cityInput = document.querySelector('.map-city-input[data-country="' + escapeHtml(countryId) + '"]');
+      const categoryInput = document.querySelector('.map-category-input[data-country="' + escapeHtml(countryId) + '"]');
+      const labelInput = document.querySelector('.map-label-input[data-country="' + escapeHtml(countryId) + '"]');
+      const urlInput = document.querySelector('.map-url-input[data-country="' + escapeHtml(countryId) + '"]');
       if (!urlInput || !urlInput.value.trim()) return;
       addSavedMap(countryId, cityInput ? cityInput.value : "", categoryInput ? categoryInput.value : "", labelInput.value, urlInput.value);
     }
     function bulkAddMapsFromTextarea(countryId) {
-      const cityInput = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
-      const categoryInput = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
-      const textarea = document.querySelector('.map-bulk-textarea[data-country="' + countryId + '"]');
+      const cityInput = document.querySelector('.map-city-input[data-country="' + escapeHtml(countryId) + '"]');
+      const categoryInput = document.querySelector('.map-category-input[data-country="' + escapeHtml(countryId) + '"]');
+      const textarea = document.querySelector('.map-bulk-textarea[data-country="' + escapeHtml(countryId) + '"]');
       if (!textarea) return;
       const parsed = parseBulkMapLines(textarea.value);
       const totalLines = textarea.value.split(/\r?\n/).filter(function(l) {
@@ -26798,7 +26806,7 @@ ${suffix}`;
       const selStart = filterInput.selectionStart, selEnd = filterInput.selectionEnd;
       mapsCityFilterQuery[countryId] = filterInput.value;
       renderMapsTab();
-      const freshInput = document.querySelector('.map-city-filter[data-country="' + countryId + '"]');
+      const freshInput = document.querySelector('.map-city-filter[data-country="' + escapeHtml(countryId) + '"]');
       if (freshInput) {
         freshInput.focus();
         freshInput.setSelectionRange(selStart, selEnd);
@@ -26835,14 +26843,14 @@ ${suffix}`;
       const bulkToggle = e.target.closest('[data-action="map-bulk-toggle"]');
       if (bulkToggle) {
         const countryId = bulkToggle.getAttribute("data-country");
-        const cityInputBefore = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
-        const categoryInputBefore = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
+        const cityInputBefore = document.querySelector('.map-city-input[data-country="' + escapeHtml(countryId) + '"]');
+        const categoryInputBefore = document.querySelector('.map-category-input[data-country="' + escapeHtml(countryId) + '"]');
         const cityVal = cityInputBefore ? cityInputBefore.value : "";
         const categoryVal = categoryInputBefore ? categoryInputBefore.value : "";
         bulkPasteOpenCountry = bulkPasteOpenCountry === countryId ? null : countryId;
         renderMapsTab();
-        const cityInputAfter = document.querySelector('.map-city-input[data-country="' + countryId + '"]');
-        const categoryInputAfter = document.querySelector('.map-category-input[data-country="' + countryId + '"]');
+        const cityInputAfter = document.querySelector('.map-city-input[data-country="' + escapeHtml(countryId) + '"]');
+        const categoryInputAfter = document.querySelector('.map-category-input[data-country="' + escapeHtml(countryId) + '"]');
         if (cityInputAfter) cityInputAfter.value = cityVal;
         if (categoryInputAfter) categoryInputAfter.value = categoryVal;
         return;
@@ -27173,8 +27181,8 @@ ${suffix}`;
       setStatus(sel.getAttribute("data-id"), sel.value);
     });
     function addCityFromInputs(stopId) {
-      const nameInput = document.querySelector('.city-name-input[data-stop="' + stopId + '"]');
-      const nightsInput = document.querySelector('.city-nights-input[data-stop="' + stopId + '"]');
+      const nameInput = document.querySelector('.city-name-input[data-stop="' + escapeHtml(stopId) + '"]');
+      const nightsInput = document.querySelector('.city-nights-input[data-stop="' + escapeHtml(stopId) + '"]');
       const name = nameInput.value.trim();
       if (!name) return;
       addCity(stopId, name, nightsInput.value);
@@ -27240,7 +27248,7 @@ ${suffix}`;
       if (legModeSelect) setLegMode(legModeSelect.getAttribute("data-id"), legModeSelect.value);
     });
     function focusStopDateInput(id) {
-      const el = document.querySelector('.route-item[data-id="' + id + '"] input[data-action="date-arrive"]');
+      const el = document.querySelector('.route-item[data-id="' + escapeHtml(id) + '"] input[data-action="date-arrive"]');
       if (el) {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
         el.focus();
@@ -27903,7 +27911,7 @@ ${suffix}`;
         }
         const subtotal = livingConverted + visaConverted;
         grandTotal += subtotal;
-        return '<tr data-id="' + id + '" data-country="' + stop.countryId + '"><td>' + escapeHtml(c.name) + '</td><td><input type="number" min="0" data-field="nights" data-id="' + id + '" value="' + (sb.nights !== null && sb.nights !== void 0 ? sb.nights : "") + '" placeholder="' + (autoNights !== null ? autoNights : 0) + '"></td><td><select data-field="currency" data-id="' + id + '">' + currencyOptionsHtml(sb.currency, codes) + '</select></td><td><input type="number" min="0" data-field="accom" data-id="' + id + '" value="' + (sb.accom || "") + '"></td><td><input type="number" min="0" data-field="daily" data-id="' + id + '" value="' + (sb.daily || "") + '"></td><td><input type="number" min="0" data-field="transport" data-id="' + id + '" value="' + (sb.transport || "") + '"></td><td class="num visa-fee-cell">' + visaText + '</td><td class="num subtotal">' + home + " " + fmtMoney(subtotal) + "</td></tr>";
+        return '<tr data-id="' + escapeHtml(id) + '" data-country="' + escapeHtml(stop.countryId) + '"><td>' + escapeHtml(c.name) + '</td><td><input type="number" min="0" data-field="nights" data-id="' + escapeHtml(id) + '" value="' + (sb.nights !== null && sb.nights !== void 0 ? sb.nights : "") + '" placeholder="' + (autoNights !== null ? autoNights : 0) + '"></td><td><select data-field="currency" data-id="' + escapeHtml(id) + '">' + currencyOptionsHtml(sb.currency, codes) + '</select></td><td><input type="number" min="0" data-field="accom" data-id="' + escapeHtml(id) + '" value="' + (sb.accom || "") + '"></td><td><input type="number" min="0" data-field="daily" data-id="' + escapeHtml(id) + '" value="' + (sb.daily || "") + '"></td><td><input type="number" min="0" data-field="transport" data-id="' + escapeHtml(id) + '" value="' + (sb.transport || "") + '"></td><td class="num visa-fee-cell">' + visaText + '</td><td class="num subtotal">' + home + " " + fmtMoney(subtotal) + "</td></tr>";
       }).join("");
       body.innerHTML = rows;
       lastBudgetTotal = grandTotal;
@@ -27979,11 +27987,11 @@ ${suffix}`;
       });
       const cardsList = document.getElementById("ec_cardsList");
       cardsList.innerHTML = ec.cards.length ? ec.cards.map(function(row) {
-        return '<div class="emergency-row"><input type="text" data-ecrow="cards" data-ecfield="label" data-id="' + row.id + '" placeholder="\u5361\u7247\u540D\u7A31\uFF08\u4F8B\u5982\uFF1AOO\u9280\u884C Visa\uFF09" value="' + escapeHtml(row.label || "") + '"><input type="text" data-ecrow="cards" data-ecfield="phone" data-id="' + row.id + '" placeholder="\u6D77\u5916\u639B\u5931\u96FB\u8A71" value="' + escapeHtml(row.phone || "") + '"><button type="button" class="btn btn-small btn-ghost" data-action="ec-remove-card" data-id="' + row.id + '">\u79FB\u9664</button></div>';
+        return '<div class="emergency-row"><input type="text" data-ecrow="cards" data-ecfield="label" data-id="' + escapeHtml(row.id) + '" placeholder="\u5361\u7247\u540D\u7A31\uFF08\u4F8B\u5982\uFF1AOO\u9280\u884C Visa\uFF09" value="' + escapeHtml(row.label || "") + '"><input type="text" data-ecrow="cards" data-ecfield="phone" data-id="' + escapeHtml(row.id) + '" placeholder="\u6D77\u5916\u639B\u5931\u96FB\u8A71" value="' + escapeHtml(row.phone || "") + '"><button type="button" class="btn btn-small btn-ghost" data-action="ec-remove-card" data-id="' + escapeHtml(row.id) + '">\u79FB\u9664</button></div>';
       }).join("") : '<div class="empty-state-small">\u5C1A\u672A\u65B0\u589E</div>';
       const contactsList = document.getElementById("ec_contactsList");
       contactsList.innerHTML = ec.contacts.length ? ec.contacts.map(function(row) {
-        return '<div class="emergency-row"><input type="text" data-ecrow="contacts" data-ecfield="name" data-id="' + row.id + '" placeholder="\u59D3\u540D" value="' + escapeHtml(row.name || "") + '"><input type="text" data-ecrow="contacts" data-ecfield="relation" data-id="' + row.id + '" placeholder="\u95DC\u4FC2" value="' + escapeHtml(row.relation || "") + '"><input type="text" data-ecrow="contacts" data-ecfield="phone" data-id="' + row.id + '" placeholder="\u96FB\u8A71" value="' + escapeHtml(row.phone || "") + '"><button type="button" class="btn btn-small btn-ghost" data-action="ec-remove-contact" data-id="' + row.id + '">\u79FB\u9664</button></div>';
+        return '<div class="emergency-row"><input type="text" data-ecrow="contacts" data-ecfield="name" data-id="' + escapeHtml(row.id) + '" placeholder="\u59D3\u540D" value="' + escapeHtml(row.name || "") + '"><input type="text" data-ecrow="contacts" data-ecfield="relation" data-id="' + escapeHtml(row.id) + '" placeholder="\u95DC\u4FC2" value="' + escapeHtml(row.relation || "") + '"><input type="text" data-ecrow="contacts" data-ecfield="phone" data-id="' + escapeHtml(row.id) + '" placeholder="\u96FB\u8A71" value="' + escapeHtml(row.phone || "") + '"><button type="button" class="btn btn-small btn-ghost" data-action="ec-remove-contact" data-id="' + escapeHtml(row.id) + '">\u79FB\u9664</button></div>';
       }).join("") : '<div class="empty-state-small">\u5C1A\u672A\u65B0\u589E</div>';
     }
     function renderMissionList() {
